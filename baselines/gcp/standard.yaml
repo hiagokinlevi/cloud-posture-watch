@@ -1,0 +1,45 @@
+# GCP Security Posture Baseline — Standard Profile
+# ==================================================
+# Defines expected security configurations for a standard
+# GCP production project.
+name: gcp_standard
+version: "1.0"
+provider: gcp
+profile: standard
+description: "Standard security baseline for GCP projects"
+
+storage:
+  gcs:
+    # Uniform bucket-level access disables legacy ACLs; always enable in production
+    uniform_access_required: true
+    # No bucket should grant access to allUsers or allAuthenticatedUsers
+    public_iam_binding_denied: true
+    # Enable versioning for buckets that store critical data
+    versioning_recommended: true
+    # Enable access logging (writes to a log-sink bucket)
+    logging_recommended: true
+
+logging:
+  cloud_audit_logs:
+    # Admin Activity audit logs should always be enabled (they are by default)
+    admin_activity_required: true
+    # Data Access audit logs for storage are off by default; enable for sensitive projects
+    data_access_recommended: true
+  cloud_logging:
+    # Log sinks should export to a long-term destination (Cloud Storage or BigQuery)
+    export_sink_required: true
+
+network:
+  firewall_rules:
+    # No firewall rule should allow SSH from 0.0.0.0/0 or ::/0
+    no_world_ssh: true
+    # No firewall rule should allow RDP from 0.0.0.0/0 or ::/0
+    no_world_rdp: true
+    # Default deny-all ingress is recommended
+    default_deny_ingress_recommended: true
+
+iam:
+  # Service accounts should not have user-managed keys when possible
+  service_account_key_rotation_days: 90
+  # Avoid assigning primitive roles (roles/owner, roles/editor) to human users
+  no_primitive_roles_for_users_recommended: true

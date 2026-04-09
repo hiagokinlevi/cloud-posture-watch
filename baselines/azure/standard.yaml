@@ -1,0 +1,40 @@
+# Azure Security Posture Baseline — Standard Profile
+# ====================================================
+# Defines expected security configurations for a standard
+# Azure production subscription.
+name: azure_standard
+version: "1.0"
+provider: azure
+profile: standard
+description: "Standard security baseline for Azure subscriptions"
+
+storage:
+  storage_accounts:
+    # Require HTTPS-only traffic (secure transfer required)
+    https_only_required: true
+    # Block public blob access at the account level
+    public_blob_access_denied: true
+    # Minimum acceptable TLS version
+    min_tls_version: "TLS1_2"
+    # Prefer customer-managed keys for encryption in sensitive environments
+    customer_managed_key_recommended: false  # Set true for strict profile
+
+logging:
+  diagnostic_settings:
+    # All storage accounts should ship logs to a Log Analytics workspace or storage account
+    enabled_required: true
+  activity_log:
+    # Azure Monitor activity log should be retained for at least 90 days
+    retention_days_minimum: 90
+
+network:
+  network_security_groups:
+    # No NSG rule should allow SSH or RDP from any source
+    no_world_ssh: true   # TCP/22 from 0.0.0.0/0 not allowed
+    no_world_rdp: true   # TCP/3389 from 0.0.0.0/0 not allowed
+
+identity:
+  # MFA should be enforced for all users via Conditional Access
+  mfa_enforced_recommended: true
+  # Guest accounts should be reviewed periodically
+  guest_account_review_recommended: true

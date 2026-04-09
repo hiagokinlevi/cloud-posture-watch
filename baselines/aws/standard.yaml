@@ -1,0 +1,34 @@
+# AWS Security Posture Baseline — Standard Profile
+# =================================================
+# This baseline defines expected security configurations for
+# a standard AWS production environment.
+# Adjust thresholds based on your organization's requirements.
+name: aws_standard
+version: "1.0"
+provider: aws
+profile: standard
+description: "Standard security baseline for AWS accounts"
+
+storage:
+  s3:
+    public_access_block_required: true
+    encryption_required: true
+    logging_required: true
+    versioning_recommended: true
+
+logging:
+  cloudtrail:
+    enabled_required: true
+    multi_region_required: true
+    log_file_validation: true
+  vpc_flow_logs:
+    enabled_recommended: true
+
+encryption:
+  default_ebs_encryption: true
+  rds_encryption: true
+  secrets_manager_preferred: true
+
+network:
+  security_groups_no_world_ssh: true    # 0.0.0.0/0 on port 22 not allowed
+  security_groups_no_world_rdp: true    # 0.0.0.0/0 on port 3389 not allowed
