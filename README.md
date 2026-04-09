@@ -12,6 +12,7 @@
 - **Exposure analysis** — identifies publicly accessible storage, compute, and network resources
 - **Logging gap detection** — checks whether audit trails, access logs, and flow logs are enabled
 - **VPC Flow Logs coverage** — flags AWS VPCs with missing flow logs, missing rejected-traffic capture, or coarse aggregation windows
+- **Offline Azure NSG review** — scans exported `az network nsg list` JSON for public admin, database, and broad inbound rules
 - **Encryption posture** — validates encryption at rest and in transit across storage and database services
 - **Configuration drift detection** — compares live state against YAML baselines and highlights deviations
 - **Risk scoring** — assigns severity-weighted risk flags per resource
@@ -61,6 +62,10 @@ k1n-posture drift --provider aws --baseline baselines/aws/standard.yaml
 
 # Generate a report from saved state
 k1n-posture report --input ./output/last_run.json --format markdown
+
+# Offline Azure NSG exposure review
+az network nsg list -o json > nsgs.json
+k1n-posture scan-azure-nsgs --input nsgs.json --fail-on high
 ```
 
 ---
@@ -94,7 +99,7 @@ Each **provider** module collects raw configuration state and returns typed data
 | AWS      | Security Groups  | World-open SSH/RDP, public admin/database exposure  |
 | AWS      | VPC Flow Logs    | Missing telemetry, reject-traffic gaps, coarse aggregation |
 | Azure    | Storage Accounts | HTTPS-only, public blob access, encryption          |
-| Azure    | NSGs             | World-open SSH/RDP                                  |
+| Azure    | NSGs             | Offline export review for world-open admin, database, web, and broad inbound rules |
 | GCP      | Cloud Storage    | Uniform bucket-level access, public ACLs            |
 | GCP      | Cloud Logging    | Audit log configuration                             |
 

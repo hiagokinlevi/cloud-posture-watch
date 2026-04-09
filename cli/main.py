@@ -243,6 +243,79 @@ def _assess_gcp(baseline_path: Path, output_dir: str, fail_on: str) -> None:
     click.echo("(Full GCP assessment implementation: see providers/gcp/storage_collector.py)")
 
 
+@cli.command("scan-azure-nsgs")
+@click.option(
+    "--input",
+    "input_file",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to an Azure NSG JSON export from `az network nsg list -o json`.",
+)
+@click.option(
+    "--fail-on",
+    "fail_on",
+    default=None,
+    type=click.Choice(["low", "medium", "high", "critical"], case_sensitive=False),
+    help="Exit with a non-zero code if any finding reaches this severity.",
+)
+@click.pass_context
+def scan_azure_nsgs(ctx: click.Context, input_file: str, fail_on: str | None) -> None:
+    """
+    Analyze an offline Azure NSG JSON export for public network exposure.
+
+    This command does not require Azure credentials or the Azure SDK. Export NSGs
+    with `az network nsg list -o json` and review the resulting report before
+    applying firewall changes.
+    """
+    import uuid
+    from analyzers.nsg_exposure import analyze_nsg_exposure
+    from providers.azure.network_collector import load_nsgs_from_export
+    from reports.posture_report import save_report
+    from schemas.posture import PostureFinding, PostureReport, Provider, Severity
+
+    nsgs = load_nsgs_from_export(input_file)
+    findings = analyze_nsg_exposure(nsgs)
+    schema_findings = [
+        PostureFinding(
+            provider=Provider.AZURE,
+            resource_type=f.resource_type,
+            resource_name=f.resource_name or f.resource_id,
+            severity=Severity(f.severity),
+            flag=f.rule_id,
+            title=f.title,
+            recommendation=f.recommendation,
+        )
+        for f in findings
+    ]
+
+    report = PostureReport(
+        run_id=str(uuid.uuid4())[:8],
+        provider=Provider.AZURE,
+        baseline_name="offline-azure-nsg-export",
+        total_resources=len(nsgs),
+        findings=schema_findings,
+    )
+    report_path = save_report(report, ctx.obj["output_dir"])
+
+    counts = report.finding_counts
+    click.echo(
+        f"Azure NSG export: {len(nsgs)} NSG(s), {len(findings)} finding(s) | "
+        f"CRITICAL={counts['critical']} HIGH={counts['high']} "
+        f"MEDIUM={counts['medium']} LOW={counts['low']}"
+    )
+    click.echo(f"Report written to: {report_path}")
+
+    if fail_on:
+        severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+        threshold = severity_rank.get(fail_on.lower(), 3)
+        if any(severity_rank.get(f.severity.value, 0) >= threshold for f in report.findings):
+            click.echo(
+                f"Fail condition met: findings at or above '{fail_on}' severity detected.",
+                err=True,
+            )
+            sys.exit(1)
+
+
 @cli.command()
 @click.option(
     "--baseline",

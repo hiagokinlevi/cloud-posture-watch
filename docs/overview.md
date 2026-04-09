@@ -6,6 +6,8 @@
 
 Cloud Security Posture Management refers to the practice of continuously assessing cloud infrastructure configurations against security best practices, regulatory requirements, and organisational policies. Where traditional security tools focus on active threats, CSPM focuses on configuration risk: the misconfigured storage bucket that is publicly accessible, the database that lacks encryption, the audit log that was never enabled.
 
+For Azure network reviews, `k1n-posture scan-azure-nsgs --input nsgs.json` accepts an offline `az network nsg list -o json` export and applies the NSG exposure analyzer without requiring live credentials. This is useful in restricted environments where a read-only export is easier to approve than direct API access.
+
 ## What this tool does
 
 1. **Collects** configuration state from cloud APIs using read-only credentials.
