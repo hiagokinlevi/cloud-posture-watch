@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "cloud-posture-watch"
@@ -52,7 +52,20 @@ dev = [
 
 [project.scripts]
 # Main CLI entry point
-k1n-posture = "cli.main:cli"
+k1n-posture = "cloud_posture_watch_cli:cli"
+
+[tool.setuptools]
+include-package-data = true
+py-modules = ["cloud_posture_watch_cli"]
+
+[tool.setuptools.packages.find]
+include = [
+    "analyzers*",
+    "cli*",
+    "providers*",
+    "reports*",
+    "schemas*",
+]
 
 [tool.black]
 line-length = 100

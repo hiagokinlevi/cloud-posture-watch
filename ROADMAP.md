@@ -18,8 +18,8 @@ This document outlines the planned development direction for `cloud-posture-watc
 
 ## v0.2 — Compute and network coverage
 
-- [ ] AWS EC2 security group collector (SSH/RDP world-open detection)
-- [ ] AWS VPC flow logs coverage check
+- [x] AWS EC2 security group collector (SSH/RDP world-open detection)
+- [x] AWS VPC flow logs coverage check
 - [ ] Azure NSG collector
 - [ ] GCP Firewall rules collector
 - [ ] Risk scoring model with numeric severity ratings

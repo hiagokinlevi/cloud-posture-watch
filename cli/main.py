@@ -15,11 +15,25 @@ Global options (can also be set via .env or environment variables):
   --output-dir  Directory for report output
 """
 import sys
+import logging
 from pathlib import Path
 
 import click
-import structlog
-from dotenv import load_dotenv
+try:
+    import structlog
+except ImportError:  # pragma: no cover - exercised via offline install smoke tests
+    class _StructlogFallback:
+        @staticmethod
+        def get_logger(*_args, **_kwargs):
+            return logging.getLogger("cloud-posture-watch")
+
+    structlog = _StructlogFallback()
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - exercised via offline install smoke tests
+    def load_dotenv() -> bool:
+        return False
 
 # Load .env from the working directory before any other imports that read env vars
 load_dotenv()
@@ -54,7 +68,6 @@ def cli(ctx: click.Context, provider: str, output_dir: str, verbose: bool) -> No
     ctx.obj["verbose"] = verbose
 
     # Configure structlog level based on verbosity flag
-    import logging
     log_level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(level=log_level, format="%(message)s")
 
@@ -119,7 +132,9 @@ def _assess_aws(baseline_path: Path, output_dir: str, fail_on: str) -> None:
     import os
     import uuid
     import boto3
+    from analyzers.flow_logs_analyzer import analyze_vpc_flow_logs
     from providers.aws.storage_collector import assess_bucket_posture
+    from providers.aws.flow_logs_collector import collect_vpc_flow_log_postures
     from analyzers.exposure_analyzer import analyze_exposure
     from analyzers.logging_analyzer import analyze_logging_coverage
     from analyzers.drift_analyzer import analyze_drift
@@ -136,10 +151,14 @@ def _assess_aws(baseline_path: Path, output_dir: str, fail_on: str) -> None:
     click.echo("Collecting S3 bucket posture...")
     buckets = assess_bucket_posture(session)
     click.echo(f"  Found {len(buckets)} bucket(s).")
+    click.echo("Collecting VPC Flow Logs posture...")
+    vpc_postures = collect_vpc_flow_log_postures(session)
+    click.echo(f"  Found {len(vpc_postures)} VPC(s).")
 
     # Run analyzers
     exposure_findings = analyze_exposure(buckets, provider="aws", resource_type="s3_bucket")
     logging_gaps = analyze_logging_coverage(buckets, provider="aws", resource_type="s3_bucket")
+    flow_log_findings = analyze_vpc_flow_logs(vpc_postures, provider="aws", resource_type="vpc")
     drift_items = analyze_drift(buckets, provider="aws", baseline_path=baseline_path)
 
     # Convert raw findings to Pydantic models for the report
@@ -151,6 +170,16 @@ def _assess_aws(baseline_path: Path, output_dir: str, fail_on: str) -> None:
             resource_name=f.resource_name,
             severity=Severity(f.severity),
             flag=f.flag,
+            title=f.title,
+            recommendation=f.recommendation,
+        ))
+    for f in flow_log_findings:
+        schema_findings.append(PostureFinding(
+            provider=Provider.AWS,
+            resource_type=f.resource_type,
+            resource_name=f.resource_name,
+            severity=Severity(f.severity),
+            flag=f.rule_id,
             title=f.title,
             recommendation=f.recommendation,
         ))
@@ -174,7 +203,7 @@ def _assess_aws(baseline_path: Path, output_dir: str, fail_on: str) -> None:
         run_id=str(uuid.uuid4())[:8],
         provider=Provider.AWS,
         baseline_name=baseline_path.stem,
-        total_resources=len(buckets),
+        total_resources=len(buckets) + len(vpc_postures),
         findings=schema_findings,
         drift_items=schema_drift,
     )

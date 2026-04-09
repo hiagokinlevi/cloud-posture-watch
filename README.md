@@ -2,7 +2,7 @@
 
 **Cloud security posture assessment for AWS, Azure, and GCP — exposure analysis, logging gaps, and configuration drift detection.**
 
-`cloud-posture-watch` is a multi-cloud CLI tool that audits the security posture of your cloud environments. It collects configuration state from AWS, Azure, and GCP using read-only APIs, compares that state against opinionated security baselines, and produces structured reports covering public exposure, logging coverage, encryption posture, and configuration drift.
+`cloud-posture-watch` is a multi-cloud CLI tool that audits the security posture of your cloud environments. It collects configuration state from AWS, Azure, and GCP using read-only APIs, compares that state against opinionated security baselines, and produces structured reports covering public exposure, logging coverage, encryption posture, VPC network telemetry, and configuration drift.
 
 ---
 
@@ -11,6 +11,7 @@
 - **Multi-cloud support** — AWS, Azure, and GCP in a single tool
 - **Exposure analysis** — identifies publicly accessible storage, compute, and network resources
 - **Logging gap detection** — checks whether audit trails, access logs, and flow logs are enabled
+- **VPC Flow Logs coverage** — flags AWS VPCs with missing flow logs, missing rejected-traffic capture, or coarse aggregation windows
 - **Encryption posture** — validates encryption at rest and in transit across storage and database services
 - **Configuration drift detection** — compares live state against YAML baselines and highlights deviations
 - **Risk scoring** — assigns severity-weighted risk flags per resource
@@ -32,7 +33,8 @@
 ```bash
 git clone https://github.com/hiagokinlevi/cloud-posture-watch.git
 cd cloud-posture-watch
-pip install -e ".[dev]"
+python -m venv --system-site-packages .venv
+./.venv/bin/python -m pip install -e . --no-deps --no-build-isolation
 ```
 
 ### Configure
@@ -89,7 +91,8 @@ Each **provider** module collects raw configuration state and returns typed data
 |----------|------------------|-----------------------------------------------------|
 | AWS      | S3               | Public access block, encryption, logging, versioning |
 | AWS      | CloudTrail       | Enabled, multi-region, log validation               |
-| AWS      | Security Groups  | World-open SSH/RDP                                  |
+| AWS      | Security Groups  | World-open SSH/RDP, public admin/database exposure  |
+| AWS      | VPC Flow Logs    | Missing telemetry, reject-traffic gaps, coarse aggregation |
 | Azure    | Storage Accounts | HTTPS-only, public blob access, encryption          |
 | Azure    | NSGs             | World-open SSH/RDP                                  |
 | GCP      | Cloud Storage    | Uniform bucket-level access, public ACLs            |
@@ -115,7 +118,8 @@ All collectors use **read-only** permissions. No write operations are performed.
     "s3:GetBucketPublicAccessBlock",
     "cloudtrail:DescribeTrails",
     "ec2:DescribeSecurityGroups",
-    "ec2:DescribeFlowLogs"
+    "ec2:DescribeFlowLogs",
+    "ec2:DescribeVpcs"
   ],
   "Resource": "*"
 }

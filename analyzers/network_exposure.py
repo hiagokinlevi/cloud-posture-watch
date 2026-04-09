@@ -28,6 +28,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from providers.aws.network_collector import SecurityGroupPosture
+
 
 @dataclass
 class NetworkFinding:
@@ -132,7 +134,7 @@ def _port_range_includes(from_port: int, to_port: int, target_port: int) -> bool
 
 
 def _check_inbound_rule(
-    rule: dict,
+    rule: Any,
     provider: str,
     resource_type: str,
     resource_id: str,
@@ -140,10 +142,10 @@ def _check_inbound_rule(
 ) -> list[NetworkFinding]:
     """Analyze a single inbound rule and return any findings."""
     findings: list[NetworkFinding] = []
-    protocol = str(rule.get("protocol", "tcp")).lower()
-    from_port = int(rule.get("from_port", 0))
-    to_port = int(rule.get("to_port", 65535))
-    cidr_ranges = rule.get("cidr_ranges", [])
+    protocol = str(_rule_value(rule, "protocol", "tcp")).lower()
+    from_port = int(_rule_value(rule, "from_port", 0))
+    to_port = int(_rule_value(rule, "to_port", 65535))
+    cidr_ranges = list(_rule_value(rule, "cidr_ranges", []))
 
     if not _is_public(cidr_ranges):
         return findings  # Not public — not a network exposure finding
@@ -245,18 +247,18 @@ def _check_inbound_rule(
 
 
 def _check_outbound_rule(
-    rule: dict,
+    rule: Any,
     provider: str,
     resource_type: str,
     resource_id: str,
     resource_name: str,
 ) -> list[NetworkFinding]:
     """Analyze outbound rules — unrestricted egress is informational."""
-    cidr_ranges = rule.get("cidr_ranges", [])
+    cidr_ranges = list(_rule_value(rule, "cidr_ranges", []))
     if not _is_public(cidr_ranges):
         return []
 
-    protocol = str(rule.get("protocol", "tcp")).lower()
+    protocol = str(_rule_value(rule, "protocol", "tcp")).lower()
     if protocol in ("-1", "all"):
         return [NetworkFinding(
             provider=provider,
@@ -280,3 +282,10 @@ def _check_outbound_rule(
 def _is_admin_or_db(port: int) -> bool:
     """True if the port is already covered by admin or database checks."""
     return port in _ADMIN_PORTS or port in _DATABASE_PORTS
+
+
+def _rule_value(rule: Any, key: str, default: Any) -> Any:
+    """Read a rule attribute from either a mapping or a dataclass-like object."""
+    if isinstance(rule, dict):
+        return rule.get(key, default)
+    return getattr(rule, key, default)

@@ -16,6 +16,7 @@ Provider collector  -->  Analyzer(s)  -->  Findings  -->  Report
 2. **Analyzers** consume the collector output and apply rule logic:
    - `exposure_analyzer` — checks risk flags for access control violations
    - `logging_analyzer` — checks logging-related attributes
+   - `flow_logs_analyzer` — checks AWS VPC Flow Logs coverage and telemetry fidelity
    - `drift_analyzer` — loads a baseline YAML and compares expected vs. actual values
 3. **Findings** are converted to Pydantic `PostureFinding` models.
 4. **Report generator** serialises findings to Markdown (and optionally JSON).
