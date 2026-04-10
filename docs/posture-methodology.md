@@ -27,6 +27,7 @@ Provider collector  -->  Analyzer(s)  -->  Findings  -->  Report
 4. **Report generator** serialises findings to Markdown (and optionally JSON).
 5. **JSON schema contract** tags posture JSON reports with `$schema` and `schema_version`, and `k1n-posture json-schema` prints the stable v1 contract for downstream validators.
 6. **Webhook notification** can summarize an approved JSON posture report for Slack or Teams. Payloads include provider, run ID, severity counts, and the top findings. The webhook URL is supplied only at send time and is never printed in success output.
+7. **Watch mode** compares the latest posture JSON report to the prior snapshot, tracks newly introduced versus resolved findings, persists the latest snapshot for the next run, and can alert only when new findings meet a configured severity threshold.
 
 ## Baseline profiles
 
@@ -66,3 +67,4 @@ The v1 posture-report JSON contract is exposed with `k1n-posture json-schema`. G
 - **GCP IAM exports**: GCP IAM checks depend on exported policy `bindings` and optional service account key metadata. External-member checks only flag user domains when `--org-domain` is supplied.
 - **Cross-cloud IAM comparison**: The comparison report does not infer new risk beyond the provider-specific analyzers. It groups supplied offline findings by common identity themes and uses the highest provider risk score as the comparison score.
 - **Webhook notifications**: Slack and Teams notifications are derived from saved JSON posture reports, not live cloud state. Use `--dry-run` to review payload contents before posting to an external incoming webhook.
+- **Watch mode**: Scheduled watch runs compare saved JSON posture reports rather than re-querying cloud APIs on their own. The first run seeds state without alerting unless `--alert-on-first-run` is explicitly enabled.

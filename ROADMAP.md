@@ -37,7 +37,7 @@ This document outlines the planned development direction for `cloud-posture-watc
 
 ## v0.4 — Continuous monitoring mode
 
-- [ ] Watch mode: re-assess on a schedule and alert on new findings
+- [x] Watch mode: compare scheduled posture-report snapshots and alert on new findings
 - [x] Webhook output for Slack / Teams notifications
 - [x] JSON output schema stable for downstream tooling integration
 - [ ] GitHub Actions marketplace action

@@ -23,6 +23,7 @@
 - **Risk scoring** — applies a shared numeric 0-100 severity model across CLI summaries, Markdown, JSON, and HTML reports
 - **Stable JSON contract** — publishes a v1 posture-report schema for downstream dashboards and CI tooling
 - **Markdown reports** — human-readable output with findings, scores, and remediation recommendations
+- **Watch mode for scheduled runs** — compares the latest JSON report to the prior snapshot and alerts only on newly introduced findings
 - **Slack and Teams webhooks** — sends posture-report summaries to incoming webhooks or prints dry-run payloads for approval
 - **Extensible baselines** — minimal / standard / strict profiles, all customizable
 
@@ -111,6 +112,14 @@ k1n-posture notify-webhook \
 
 # Print the stable posture-report JSON schema
 k1n-posture json-schema
+
+# Compare the latest report to the previous snapshot and dry-run a Slack alert
+k1n-posture watch-report \
+  --input ./output/posture_aws_latest.json \
+  --state-file ./output/aws-watch-state.json \
+  --alert-on high \
+  --target slack \
+  --dry-run
 ```
 
 ---
@@ -227,6 +236,8 @@ JSON posture exports include `$schema` and `schema_version` fields. `k1n-posture
 
 Webhook notifications use saved JSON posture reports as input. `k1n-posture notify-webhook --target slack|teams` builds a provider summary, severity counts, and the top findings, then posts it to an HTTPS incoming webhook. Use `--dry-run` during change review to print the exact payload without sending data or exposing a webhook secret in command output.
 
+Watch mode is designed for scheduled runners that already refresh posture JSON artifacts. `k1n-posture watch-report --input latest.json --state-file .watch/aws.json --alert-on high --target slack|teams` compares the latest report to the previous snapshot, summarizes new, resolved, and persistent findings, updates the state file, and only emits an alert when newly introduced findings meet the configured severity threshold. By default the first run seeds state without alerting to avoid noisy bootstrap notifications; add `--alert-on-first-run` when an initial alert is desired.
+
 ---
 
 ## Running in CI
@@ -239,6 +250,15 @@ Webhook notifications use saved JSON posture reports as input. `k1n-posture noti
     AWS_ACCESS_KEY_ID: ${{ secrets.POSTURE_AWS_KEY_ID }}
     AWS_SECRET_ACCESS_KEY: ${{ secrets.POSTURE_AWS_SECRET }}
     AWS_REGION: us-east-1
+
+- name: Alert on newly introduced high findings
+  run: |
+    k1n-posture watch-report \
+      --input ./output/posture_aws_latest.json \
+      --state-file .watch/aws-watch-state.json \
+      --alert-on high \
+      --target slack \
+      --webhook-url "${{ secrets.POSTURE_SLACK_WEBHOOK }}"
 ```
 
 ---

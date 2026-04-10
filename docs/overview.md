@@ -20,13 +20,16 @@ For cross-cloud identity reviews, `k1n-posture scan-iam-comparison --aws-input a
 
 For notification workflows, `k1n-posture notify-webhook --input posture.json --target slack|teams` reads a saved JSON posture report and sends a compact severity summary plus top findings to an incoming Slack or Microsoft Teams webhook. Use `--dry-run` to inspect the payload without making a network request.
 
+For scheduled monitoring workflows, `k1n-posture watch-report --input posture.json --state-file .watch/aws.json --alert-on high --target slack|teams` compares the latest posture report to the previous snapshot, highlights newly introduced versus resolved findings, and emits an alert only when the new findings meet the configured severity threshold.
+
 ## What this tool does
 
 1. **Collects** configuration state from cloud APIs using read-only credentials.
 2. **Analyzes** that state against rules covering exposure, logging, encryption, network access, and IAM posture.
 3. **Compares** live state against YAML baseline profiles to detect configuration drift.
 4. **Reports** findings in Markdown with severity ratings, risk scores, and remediation guidance.
-5. **Notifies** Slack or Teams channels from approved JSON posture artifacts when an operator supplies an HTTPS incoming webhook.
+5. **Watches** scheduled JSON posture artifacts for newly introduced findings.
+6. **Notifies** Slack or Teams channels from approved JSON posture artifacts when an operator supplies an HTTPS incoming webhook.
 
 ## What this tool does not do
 
@@ -34,6 +37,7 @@ For notification workflows, `k1n-posture notify-webhook --input posture.json --t
 - It does not modify any cloud resources.
 - It does not store credentials or send data to external services.
 - It does not send webhook notifications unless `notify-webhook` is invoked without `--dry-run` and an HTTPS webhook URL is supplied.
+- It does not schedule itself; use cron, GitHub Actions, or another runner to refresh reports and invoke `watch-report`.
 - It does not replace a comprehensive security review or threat model.
 
 ## Supported providers
