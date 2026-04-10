@@ -16,6 +16,8 @@ For AWS database reviews, `k1n-posture scan-aws-rds --input aws-rds-instances.js
 
 For Azure identity reviews, `k1n-posture scan-azure-rbac --input azure-rbac.json --trusted-domain example.com` accepts offline role assignment exports from `az role assignment list --all -o json`. It flags broad Owner or Contributor assignments, guest or external privileged principals, service-principal Owner grants, User Access Administrator delegation gaps, and wildcard custom roles without making live API calls.
 
+For GCP database reviews, `k1n-posture scan-gcp-cloud-sql --input cloud-sql-instances.json` accepts offline exports from `gcloud sql instances list --format=json`. It flags public IPv4 exposure, broad `authorizedNetworks`, and missing SSL/TLS enforcement controls without making live API calls.
+
 For GCP identity reviews, `k1n-posture scan-gcp-iam --input gcp-iam-policies.json --org-domain example.com` accepts offline IAM policy exports with optional service account key metadata. It flags primitive Owner/Editor/Viewer grants, public principals, external users in sensitive roles, default service accounts, broad IAM-admin roles, and stale service account keys without making live API calls.
 
 For cross-cloud identity reviews, `k1n-posture scan-iam-comparison --aws-input aws-iam-posture.json --azure-input azure-rbac.json --gcp-input gcp-iam-policies.json` reuses the offline IAM analyzers and writes one Markdown plus JSON comparison artifact. It groups findings by provider and by recurring identity themes: credential hygiene, privileged standing access, external or public access, and custom or wildcard permissions.

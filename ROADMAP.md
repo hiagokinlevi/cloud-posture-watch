@@ -48,7 +48,7 @@ This document outlines the planned development direction for `cloud-posture-watc
 
 - [x] AWS RDS encryption and public accessibility check
 - [x] Azure SQL encryption and firewall rules
-- [ ] GCP Cloud SQL public IP and SSL enforcement
+- [x] GCP Cloud SQL public IP and SSL enforcement
 - [ ] AWS Secrets Manager / Parameter Store vs. hardcoded credential heuristic
 
 ---

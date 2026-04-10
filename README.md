@@ -15,6 +15,7 @@
 - **Offline AWS IAM review** — scans exported IAM evidence for root MFA gaps, stale active user keys, and permissive policies
 - **Offline AWS RDS review** — scans exported RDS instance and cluster evidence for missing storage encryption and public database exposure
 - **Offline Azure SQL review** — scans exported logical server and database evidence for disabled TDE, public network access, and broad firewall rules
+- **Offline GCP Cloud SQL review** — scans exported Cloud SQL instance evidence for public IPv4 exposure, weak authorized networks, and missing SSL/TLS enforcement
 - **Offline Azure RBAC review** — scans role assignment exports for broad Owner/Contributor access, guest privileged assignments, service principal Owner grants, and wildcard custom roles
 - **Offline GCP IAM review** — scans exported IAM policies for primitive roles, public principals, external sensitive-role users, default service accounts, and stale service account keys
 - **Cross-cloud IAM comparison** — combines offline AWS, Azure, and GCP identity findings into one Markdown and JSON review artifact
@@ -94,6 +95,10 @@ az sql db list --server prod-sql --resource-group rg-prod -o json > azure-sql-da
 # Merge the approved exports into one file shaped as {"servers": [...], "databases": [...]}
 k1n-posture scan-azure-sql --input azure-sql-export.json --fail-on high
 
+# Offline GCP Cloud SQL public IP and TLS review
+gcloud sql instances list --format=json > cloud-sql-instances.json
+k1n-posture scan-gcp-cloud-sql --input cloud-sql-instances.json --fail-on high
+
 # Offline GCP IAM posture review
 k1n-posture scan-gcp-iam --input gcp-iam-policies.json --org-domain example.com --fail-on high
 
@@ -170,6 +175,7 @@ Each **provider** module collects raw configuration state and returns typed data
 | Azure    | RBAC             | Offline export review for broad Owner/Contributor scope, guest privileged assignments, service principal Owner grants, and wildcard custom roles |
 | Azure    | Storage Accounts | HTTPS-only, public blob access, encryption          |
 | Azure    | NSGs             | Offline export review for world-open admin, database, web, and broad inbound rules |
+| GCP      | Cloud SQL        | Offline export review for public IPv4 exposure, SSL/TLS enforcement, and broad authorized networks |
 | GCP      | Cloud Storage    | Uniform bucket-level access, public ACLs            |
 | GCP      | IAM              | Offline export review for primitive roles, public IAM members, external sensitive-role users, and service account key age |
 | GCP      | Firewall Rules   | Offline export review for world-open admin, database, web, and broad inbound rules |
@@ -222,6 +228,8 @@ Offline Azure SQL review can use approved JSON evidence instead of live credenti
 ### GCP
 
 Requires the **roles/viewer** IAM role on the target project.
+
+Offline GCP Cloud SQL review can use an approved JSON export from `gcloud sql instances list --format=json` instead of live credentials. The analyzer checks `settings.ipConfiguration.ipv4Enabled`, public `ipAddresses`, `authorizedNetworks`, and SSL/TLS controls such as `requireSsl` or `sslMode`.
 
 Offline GCP IAM review can use approved JSON evidence instead of live credentials. Use IAM policy exports with `bindings` records and include optional `service_account_keys` metadata with `service_account`, `key_id`, and `created_at_days_ago` when key-age review is needed.
 
