@@ -485,6 +485,84 @@ def scan_aws_iam(
             sys.exit(1)
 
 
+@cli.command("scan-aws-rds")
+@click.option(
+    "--input",
+    "input_file",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to an offline AWS RDS JSON export from describe-db-instances or describe-db-clusters.",
+)
+@click.option(
+    "--fail-on",
+    "fail_on",
+    default=None,
+    type=click.Choice(["low", "medium", "high", "critical"], case_sensitive=False),
+    help="Exit with a non-zero code if any finding reaches this severity.",
+)
+@click.pass_context
+def scan_aws_rds(
+    ctx: click.Context,
+    input_file: str,
+    fail_on: str | None,
+) -> None:
+    """
+    Analyze an offline AWS RDS export for encryption and public exposure risk.
+
+    This command does not require AWS credentials or boto3. It accepts JSON
+    exported from `aws rds describe-db-instances` and optionally
+    `aws rds describe-db-clusters`, including common wrapped response shapes.
+    """
+    import uuid
+    from analyzers.aws_rds_analyzer import AWSRDSAnalyzer, load_aws_rds_from_export
+    from reports.posture_report import save_report
+    from schemas.posture import PostureFinding, PostureReport, Provider, Severity
+
+    db_instances, db_clusters = load_aws_rds_from_export(input_file)
+    rds_report = AWSRDSAnalyzer().analyze(db_instances, db_clusters)
+    schema_findings = [
+        PostureFinding(
+            provider=Provider.AWS,
+            resource_type=f.resource_type,
+            resource_name=f.resource_name,
+            severity=Severity(f.severity.value),
+            flag=f.check_id,
+            title=f.title,
+            recommendation=f.recommendation,
+        )
+        for f in rds_report.findings
+    ]
+
+    report = PostureReport(
+        run_id=str(uuid.uuid4())[:8],
+        provider=Provider.AWS,
+        baseline_name="offline-aws-rds-export",
+        total_resources=len(db_instances) + len(db_clusters),
+        findings=schema_findings,
+    )
+    report_path = save_report(report, ctx.obj["output_dir"])
+
+    counts = report.finding_counts
+    click.echo(
+        f"AWS RDS export: {len(db_instances)} DB instance(s), "
+        f"{len(db_clusters)} DB cluster(s), {len(rds_report.findings)} finding(s), "
+        f"risk_score={rds_report.risk_score} | "
+        f"CRITICAL={counts['critical']} HIGH={counts['high']} "
+        f"MEDIUM={counts['medium']} LOW={counts['low']}"
+    )
+    click.echo(f"Report written to: {report_path}")
+
+    if fail_on:
+        severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+        threshold = severity_rank.get(fail_on.lower(), 3)
+        if any(severity_rank.get(f.severity.value, 0) >= threshold for f in report.findings):
+            click.echo(
+                f"Fail condition met: findings at or above '{fail_on}' severity detected.",
+                err=True,
+            )
+            sys.exit(1)
+
+
 @cli.command("scan-gcp-iam")
 @click.option(
     "--input",

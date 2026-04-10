@@ -13,6 +13,7 @@
 - **Logging gap detection** — checks whether audit trails, access logs, and flow logs are enabled
 - **VPC Flow Logs coverage** — flags AWS VPCs with missing flow logs, missing delivery destinations, missing rejected-traffic capture, or coarse aggregation windows
 - **Offline AWS IAM review** — scans exported IAM evidence for root MFA gaps, stale active user keys, and permissive policies
+- **Offline AWS RDS review** — scans exported RDS instance and cluster evidence for missing storage encryption and public database exposure
 - **Offline Azure RBAC review** — scans role assignment exports for broad Owner/Contributor access, guest privileged assignments, service principal Owner grants, and wildcard custom roles
 - **Offline GCP IAM review** — scans exported IAM policies for primitive roles, public principals, external sensitive-role users, default service accounts, and stale service account keys
 - **Cross-cloud IAM comparison** — combines offline AWS, Azure, and GCP identity findings into one Markdown and JSON review artifact
@@ -77,6 +78,10 @@ k1n-posture scan-azure-nsgs --input nsgs.json --fail-on high
 
 # Offline AWS IAM posture review
 k1n-posture scan-aws-iam --input aws-iam-posture.json --fail-on high
+
+# Offline AWS RDS encryption and public exposure review
+aws rds describe-db-instances --output json > aws-rds-instances.json
+k1n-posture scan-aws-rds --input aws-rds-instances.json --fail-on high
 
 # Offline Azure RBAC posture review
 az role assignment list --all -o json > azure-rbac.json
@@ -153,6 +158,7 @@ Each **provider** module collects raw configuration state and returns typed data
 | AWS      | Security Groups  | World-open SSH/RDP, public admin/database exposure  |
 | AWS      | VPC Flow Logs    | Missing telemetry, delivery destination gaps, reject-traffic gaps, coarse aggregation |
 | AWS      | IAM              | Offline export review for root MFA, stale active user access keys, and permissive policies |
+| AWS      | RDS              | Offline export review for storage encryption, public accessibility, and public DB subnet group risk |
 | Azure    | RBAC             | Offline export review for broad Owner/Contributor scope, guest privileged assignments, service principal Owner grants, and wildcard custom roles |
 | Azure    | Storage Accounts | HTTPS-only, public blob access, encryption          |
 | Azure    | NSGs             | Offline export review for world-open admin, database, web, and broad inbound rules |
@@ -194,6 +200,8 @@ All collectors use **read-only** permissions. No write operations are performed.
 ```
 
 Offline AWS IAM review can use an approved JSON evidence bundle instead of live credentials. Include `account_summary.SummaryMap.AccountMFAEnabled`, credential-report user rows with `access_key_*_active` and `access_key_*_age_days`, and policy documents under `policies[].document`.
+
+Offline AWS RDS review can use an approved JSON export from `aws rds describe-db-instances --output json`, plus optional `aws rds describe-db-clusters --output json` content when Aurora clusters are in scope. The analyzer accepts common wrapped response shapes and flags missing `StorageEncrypted`, `PubliclyAccessible`, and DB subnet groups that include public subnets.
 
 ### Azure
 
