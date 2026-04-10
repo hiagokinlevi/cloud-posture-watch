@@ -563,6 +563,90 @@ def scan_aws_rds(
             sys.exit(1)
 
 
+@cli.command("scan-aws-secrets")
+@click.option(
+    "--input",
+    "input_file",
+    required=True,
+    type=click.Path(exists=True),
+    help=(
+        "Path to an offline AWS Secrets Manager / SSM Parameter Store JSON export "
+        "with optional hardcoded credential evidence."
+    ),
+)
+@click.option(
+    "--fail-on",
+    "fail_on",
+    default=None,
+    type=click.Choice(["low", "medium", "high", "critical"], case_sensitive=False),
+    help="Exit with a non-zero code if any finding reaches this severity.",
+)
+@click.pass_context
+def scan_aws_secrets(
+    ctx: click.Context,
+    input_file: str,
+    fail_on: str | None,
+) -> None:
+    """
+    Analyze offline AWS managed-secret inventory against hardcoded credential evidence.
+
+    This command does not require AWS credentials or boto3. It accepts approved
+    JSON exports with Secrets Manager or SSM Parameter Store inventory plus
+    optional hardcoded credential findings from source or config review.
+    """
+    import uuid
+    from analyzers.aws_secrets_analyzer import (
+        AWSSecretsAnalyzer,
+        load_aws_secrets_from_export,
+    )
+    from reports.posture_report import save_report
+    from schemas.posture import PostureFinding, PostureReport, Provider, Severity
+
+    managed_entries, hardcoded_evidence = load_aws_secrets_from_export(input_file)
+    secrets_report = AWSSecretsAnalyzer().analyze(managed_entries, hardcoded_evidence)
+    schema_findings = [
+        PostureFinding(
+            provider=Provider.AWS,
+            resource_type=f.resource_type,
+            resource_name=f.resource_name,
+            severity=Severity(f.severity.value),
+            flag=f.check_id,
+            title=f.title,
+            recommendation=f.recommendation,
+        )
+        for f in secrets_report.findings
+    ]
+
+    report = PostureReport(
+        run_id=str(uuid.uuid4())[:8],
+        provider=Provider.AWS,
+        baseline_name="offline-aws-secrets-export",
+        total_resources=len(managed_entries) + len(hardcoded_evidence),
+        findings=schema_findings,
+    )
+    report_path = save_report(report, ctx.obj["output_dir"])
+
+    counts = report.finding_counts
+    click.echo(
+        f"AWS secrets export: {len(managed_entries)} managed entrie(s), "
+        f"{len(hardcoded_evidence)} hardcoded evidence item(s), "
+        f"{len(secrets_report.findings)} finding(s), risk_score={secrets_report.risk_score} | "
+        f"CRITICAL={counts['critical']} HIGH={counts['high']} "
+        f"MEDIUM={counts['medium']} LOW={counts['low']}"
+    )
+    click.echo(f"Report written to: {report_path}")
+
+    if fail_on:
+        severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+        threshold = severity_rank.get(fail_on.lower(), 3)
+        if any(severity_rank.get(f.severity.value, 0) >= threshold for f in report.findings):
+            click.echo(
+                f"Fail condition met: findings at or above '{fail_on}' severity detected.",
+                err=True,
+            )
+            sys.exit(1)
+
+
 @cli.command("scan-azure-sql")
 @click.option(
     "--input",

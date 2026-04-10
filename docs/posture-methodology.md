@@ -20,6 +20,7 @@ Provider collector  -->  Analyzer(s)  -->  Findings  -->  Report
    - `flow_logs_analyzer` — checks AWS VPC Flow Logs coverage, delivery destinations, and telemetry fidelity
    - `aws_iam_analyzer` — checks offline AWS IAM evidence for root MFA status, active access key age, and broadly permissive policy statements
    - `aws_rds_analyzer` — checks offline AWS RDS instance and cluster evidence for storage encryption, public accessibility, and public DB subnet group placement
+   - `aws_secrets_analyzer` — correlates offline AWS Secrets Manager and SSM Parameter Store inventory with approved hardcoded credential evidence to flag unmanaged literals and plaintext credential parameters
    - `azure_sql_analyzer` — checks offline Azure SQL server and database evidence for Transparent Data Encryption disablement, public network access, and broad firewall rules
    - `gcp_cloud_sql_analyzer` — checks offline GCP Cloud SQL instance evidence for public IPv4 exposure, missing SSL/TLS enforcement, and broad authorized networks
    - `azure_rbac_analyzer` — checks offline Azure RBAC assignments for broad Owner/Contributor scope, guest privileged access, service principal Owner grants, User Access Administrator delegation risk, and wildcard custom roles
@@ -67,6 +68,7 @@ The v1 posture-report JSON contract is exposed with `k1n-posture json-schema`. G
 - **False positives**: Some checks (e.g., versioning_recommended) may trigger on intentionally configured environments. Use the baseline YAML to tune expectations.
 - **Offline IAM evidence**: AWS IAM checks depend on exported account-summary, credential-report, and policy JSON. Missing root MFA evidence is reported as a medium-confidence finding rather than proof that MFA is disabled.
 - **Offline RDS evidence**: AWS RDS checks depend on exported DB instance and optional DB cluster JSON. Public subnet-group detection only works when subnet details are present in the export.
+- **AWS secrets correlation**: AWS secrets checks depend on approved inventory exports for Secrets Manager or SSM Parameter Store plus optional hardcoded credential findings from a separate source review. Name matching is heuristic-based, so short or ambiguous identifiers may require an explicit managed-secret hint in the supplied evidence.
 - **Azure RBAC exports**: Azure RBAC checks depend on exported role assignments and optional custom role definitions. External-principal checks only compare user principal domains when `--trusted-domain` is supplied.
 - **Azure SQL exports**: Azure SQL checks depend on an approved export bundle with `servers` and `databases` arrays. Firewall-rule checks only work when firewall ranges are included in the server objects, and TDE findings depend on database-level encryption status being present in the export.
 - **GCP Cloud SQL exports**: GCP Cloud SQL checks depend on approved `gcloud sql instances list --format=json` evidence. Public-IP findings rely on `settings.ipConfiguration.ipv4Enabled` or exported public `ipAddresses`, and TLS findings depend on `requireSsl` or `sslMode` being present in the export.
