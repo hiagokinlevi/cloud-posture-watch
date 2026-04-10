@@ -25,6 +25,7 @@ Examples:
 - S3 bucket with public access block disabled
 - GCS bucket with an `allUsers` IAM binding
 - Azure Storage Account with `allowBlobPublicAccess: true`
+- GCP firewall rule allowing SSH, RDP, database, or broad port access from `0.0.0.0/0` or `::/0`
 
 ### 2. Logging gaps
 

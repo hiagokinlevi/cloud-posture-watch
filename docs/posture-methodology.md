@@ -15,8 +15,9 @@ Provider collector  -->  Analyzer(s)  -->  Findings  -->  Report
 1. **Provider collector** returns a list of typed dataclass instances, one per resource.
 2. **Analyzers** consume the collector output and apply rule logic:
    - `exposure_analyzer` — checks risk flags for access control violations
+   - `network_exposure` — checks AWS security groups, Azure NSGs, and GCP firewall rules for public network exposure
    - `logging_analyzer` — checks logging-related attributes
-   - `flow_logs_analyzer` — checks AWS VPC Flow Logs coverage and telemetry fidelity
+   - `flow_logs_analyzer` — checks AWS VPC Flow Logs coverage, delivery destinations, and telemetry fidelity
    - `drift_analyzer` — loads a baseline YAML and compares expected vs. actual values
 3. **Findings** are converted to Pydantic `PostureFinding` models.
 4. **Report generator** serialises findings to Markdown (and optionally JSON).

@@ -27,6 +27,8 @@ dependencies = [
     "azure-mgmt-network>=25.0",
     # GCP storage client
     "google-cloud-storage>=2.16",
+    # GCP Compute client for firewall rule inventory
+    "google-cloud-compute>=1.19",
     # Structured logging
     "structlog>=24.1",
     # Table formatting for CLI output

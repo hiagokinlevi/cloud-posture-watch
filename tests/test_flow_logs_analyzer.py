@@ -9,13 +9,19 @@ def _posture(
     enabled: bool = True,
     traffic_types: list[str] | None = None,
     interval: int | None = 60,
+    destinations: list[str] | None = None,
 ) -> VpcFlowLogPosture:
+    destination_values = (
+        destinations
+        if destinations is not None
+        else ["arn:aws:logs:us-east-1:123456789012:log-group:vpc-flow-logs"]
+    )
     return VpcFlowLogPosture(
         resource_id=vpc_id,
         resource_name=name,
         region="us-east-1",
         flow_logs_enabled=enabled,
-        destinations=["arn:aws:logs:us-east-1:123456789012:log-group:vpc-flow-logs"],
+        destinations=destination_values,
         destination_types=["cloud-watch-logs"],
         traffic_types=traffic_types or ["ALL"],
         max_aggregation_interval=interval,
@@ -39,6 +45,11 @@ def test_accept_only_logs_trigger_reject_gap():
 def test_all_traffic_logs_do_not_trigger_reject_gap():
     findings = analyze_vpc_flow_logs([_posture(traffic_types=["ALL"])])
     assert not any(f.rule_id == "FLOW-002" for f in findings)
+
+
+def test_enabled_flow_logs_without_destination_are_medium():
+    findings = analyze_vpc_flow_logs([_posture(destinations=[])])
+    assert any(f.rule_id == "FLOW-004" and f.severity == "medium" for f in findings)
 
 
 def test_coarse_aggregation_interval_is_low():

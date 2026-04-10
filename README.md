@@ -11,8 +11,9 @@
 - **Multi-cloud support** — AWS, Azure, and GCP in a single tool
 - **Exposure analysis** — identifies publicly accessible storage, compute, and network resources
 - **Logging gap detection** — checks whether audit trails, access logs, and flow logs are enabled
-- **VPC Flow Logs coverage** — flags AWS VPCs with missing flow logs, missing rejected-traffic capture, or coarse aggregation windows
+- **VPC Flow Logs coverage** — flags AWS VPCs with missing flow logs, missing delivery destinations, missing rejected-traffic capture, or coarse aggregation windows
 - **Offline Azure NSG review** — scans exported `az network nsg list` JSON for public admin, database, and broad inbound rules
+- **Offline GCP firewall review** — scans exported `gcloud compute firewall-rules list` JSON for public admin, database, web, and broad inbound rules
 - **Encryption posture** — validates encryption at rest and in transit across storage and database services
 - **Configuration drift detection** — compares live state against YAML baselines and highlights deviations
 - **Risk scoring** — assigns severity-weighted risk flags per resource
@@ -66,6 +67,10 @@ k1n-posture report --input ./output/last_run.json --format markdown
 # Offline Azure NSG exposure review
 az network nsg list -o json > nsgs.json
 k1n-posture scan-azure-nsgs --input nsgs.json --fail-on high
+
+# Offline GCP firewall exposure review
+gcloud compute firewall-rules list --format=json > firewalls.json
+k1n-posture scan-gcp-firewalls --input firewalls.json --fail-on high
 ```
 
 ---
@@ -97,10 +102,11 @@ Each **provider** module collects raw configuration state and returns typed data
 | AWS      | S3               | Public access block, encryption, logging, versioning |
 | AWS      | CloudTrail       | Enabled, multi-region, log validation               |
 | AWS      | Security Groups  | World-open SSH/RDP, public admin/database exposure  |
-| AWS      | VPC Flow Logs    | Missing telemetry, reject-traffic gaps, coarse aggregation |
+| AWS      | VPC Flow Logs    | Missing telemetry, delivery destination gaps, reject-traffic gaps, coarse aggregation |
 | Azure    | Storage Accounts | HTTPS-only, public blob access, encryption          |
 | Azure    | NSGs             | Offline export review for world-open admin, database, web, and broad inbound rules |
 | GCP      | Cloud Storage    | Uniform bucket-level access, public ACLs            |
+| GCP      | Firewall Rules   | Offline export review for world-open admin, database, web, and broad inbound rules |
 | GCP      | Cloud Logging    | Audit log configuration                             |
 
 ---
@@ -137,6 +143,8 @@ Requires the built-in **Reader** role on the target subscription.
 ### GCP
 
 Requires the **roles/viewer** IAM role on the target project.
+
+Live firewall collection uses read-only Compute API access such as `compute.firewalls.list`; offline review only needs a JSON export from an account allowed to list firewall rules.
 
 ---
 

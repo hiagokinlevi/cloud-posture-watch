@@ -8,6 +8,8 @@ Cloud Security Posture Management refers to the practice of continuously assessi
 
 For Azure network reviews, `k1n-posture scan-azure-nsgs --input nsgs.json` accepts an offline `az network nsg list -o json` export and applies the NSG exposure analyzer without requiring live credentials. This is useful in restricted environments where a read-only export is easier to approve than direct API access.
 
+For GCP network reviews, `k1n-posture scan-gcp-firewalls --input firewalls.json` accepts an offline `gcloud compute firewall-rules list --format=json` export and applies the same cross-cloud exposure checks to firewall rules without requiring live credentials.
+
 ## What this tool does
 
 1. **Collects** configuration state from cloud APIs using read-only credentials.

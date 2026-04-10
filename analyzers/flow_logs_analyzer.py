@@ -55,6 +55,24 @@ def analyze_vpc_flow_logs(
             )
             continue
 
+        if not posture.destinations:
+            findings.append(
+                FlowLogFinding(
+                    provider=provider,
+                    resource_type=resource_type,
+                    resource_id=posture.resource_id,
+                    resource_name=posture.resource_name,
+                    severity="medium",
+                    rule_id="FLOW-004",
+                    title="VPC Flow Logs have no explicit delivery destination",
+                    detail="The VPC has active Flow Logs, but no CloudWatch, S3, or delivery destination was captured.",
+                    recommendation=(
+                        "Confirm the Flow Logs delivery target is configured and retained so network "
+                        "telemetry remains available for detection and incident response."
+                    ),
+                )
+            )
+
         traffic_types = {traffic_type.upper() for traffic_type in posture.traffic_types}
         if "REJECT" not in traffic_types and "ALL" not in traffic_types:
             findings.append(

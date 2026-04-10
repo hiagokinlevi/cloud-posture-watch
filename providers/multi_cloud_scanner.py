@@ -445,10 +445,11 @@ def _scan_azure(config: ProviderScanConfig) -> ProviderScanResult:
 
 def _scan_gcp(config: ProviderScanConfig) -> ProviderScanResult:
     """
-    Run GCP storage collector and analyzers.
+    Run GCP storage and firewall collectors, then run available analyzers.
 
-    Requires google-cloud-storage to be installed and GCP_PROJECT_ID to be
-    set (or passed via config).
+    Requires GCP_PROJECT_ID to be set (or passed via config). Storage and
+    firewall collectors each skip or fail independently based on installed SDKs
+    and available read-only permissions.
     """
     result = ProviderScanResult(provider="gcp")
 
@@ -457,11 +458,12 @@ def _scan_gcp(config: ProviderScanConfig) -> ProviderScanResult:
     if not project_id:
         msg = "GCP_PROJECT_ID not configured — GCP scan skipped"
         result.scan_errors.append(msg)
-        result.collector_results.append(
-            CollectorResult(
-                collector_name="storage", skipped=True, skip_reason=msg
+        for name in ("storage", "network"):
+            result.collector_results.append(
+                CollectorResult(
+                    collector_name=name, skipped=True, skip_reason=msg
+                )
             )
-        )
         return result
 
     # --- GCS Cloud Storage ---
@@ -484,6 +486,31 @@ def _scan_gcp(config: ProviderScanConfig) -> ProviderScanResult:
             CollectorResult(collector_name="storage", error=str(exc))
         )
         result.scan_errors.append(f"GCP storage collector failed: {exc}")
+
+    # --- VPC firewall rules ---
+    try:
+        from providers.gcp.network_collector import collect_firewall_rules
+        from analyzers.network_exposure import analyze_network_exposure
+
+        postures = collect_firewall_rules(project_id)
+        result.collector_results.append(
+            CollectorResult(
+                collector_name="network",
+                resource_count=len(postures),
+                postures=postures,
+            )
+        )
+        for f in analyze_network_exposure(
+            postures,
+            provider="gcp",
+            resource_type="firewall_rule",
+        ):
+            result.findings.append(_normalize_finding(f, "gcp"))
+    except Exception as exc:
+        result.collector_results.append(
+            CollectorResult(collector_name="network", error=str(exc))
+        )
+        result.scan_errors.append(f"GCP network collector failed: {exc}")
 
     return result
 

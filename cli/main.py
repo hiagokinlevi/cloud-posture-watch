@@ -316,6 +316,83 @@ def scan_azure_nsgs(ctx: click.Context, input_file: str, fail_on: str | None) ->
             sys.exit(1)
 
 
+@cli.command("scan-gcp-firewalls")
+@click.option(
+    "--input",
+    "input_file",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to a GCP firewall JSON export from `gcloud compute firewall-rules list --format=json`.",
+)
+@click.option(
+    "--fail-on",
+    "fail_on",
+    default=None,
+    type=click.Choice(["low", "medium", "high", "critical"], case_sensitive=False),
+    help="Exit with a non-zero code if any finding reaches this severity.",
+)
+@click.pass_context
+def scan_gcp_firewalls(ctx: click.Context, input_file: str, fail_on: str | None) -> None:
+    """
+    Analyze an offline GCP firewall-rule JSON export for public network exposure.
+
+    This command does not require GCP credentials or the Google SDK. Export rules
+    with `gcloud compute firewall-rules list --format=json` and review the report
+    before applying firewall changes.
+    """
+    import uuid
+    from analyzers.network_exposure import analyze_network_exposure
+    from providers.gcp.network_collector import load_firewall_rules_from_export
+    from reports.posture_report import save_report
+    from schemas.posture import PostureFinding, PostureReport, Provider, Severity
+
+    firewalls = load_firewall_rules_from_export(input_file)
+    findings = analyze_network_exposure(
+        firewalls,
+        provider="gcp",
+        resource_type="firewall_rule",
+    )
+    schema_findings = [
+        PostureFinding(
+            provider=Provider.GCP,
+            resource_type=f.resource_type,
+            resource_name=f.resource_name or f.resource_id,
+            severity=Severity(f.severity),
+            flag=f.rule_id,
+            title=f.title,
+            recommendation=f.recommendation,
+        )
+        for f in findings
+    ]
+
+    report = PostureReport(
+        run_id=str(uuid.uuid4())[:8],
+        provider=Provider.GCP,
+        baseline_name="offline-gcp-firewall-export",
+        total_resources=len(firewalls),
+        findings=schema_findings,
+    )
+    report_path = save_report(report, ctx.obj["output_dir"])
+
+    counts = report.finding_counts
+    click.echo(
+        f"GCP firewall export: {len(firewalls)} rule(s), {len(findings)} finding(s) | "
+        f"CRITICAL={counts['critical']} HIGH={counts['high']} "
+        f"MEDIUM={counts['medium']} LOW={counts['low']}"
+    )
+    click.echo(f"Report written to: {report_path}")
+
+    if fail_on:
+        severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+        threshold = severity_rank.get(fail_on.lower(), 3)
+        if any(severity_rank.get(f.severity.value, 0) >= threshold for f in report.findings):
+            click.echo(
+                f"Fail condition met: findings at or above '{fail_on}' severity detected.",
+                err=True,
+            )
+            sys.exit(1)
+
+
 @cli.command()
 @click.option(
     "--baseline",
