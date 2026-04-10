@@ -25,6 +25,7 @@ Provider collector  -->  Analyzer(s)  -->  Findings  -->  Report
    - `drift_analyzer` — loads a baseline YAML and compares expected vs. actual values
 3. **Findings** are converted to Pydantic `PostureFinding` models.
 4. **Report generator** serialises findings to Markdown (and optionally JSON).
+5. **Webhook notification** can summarize an approved JSON posture report for Slack or Teams. Payloads include provider, run ID, severity counts, and the top findings. The webhook URL is supplied only at send time and is never printed in success output.
 
 ## Baseline profiles
 
@@ -59,3 +60,4 @@ The raw score is capped at 100. A score of 0 maps to `clear`, 1-19 maps to `low`
 - **Azure RBAC exports**: Azure RBAC checks depend on exported role assignments and optional custom role definitions. External-principal checks only compare user principal domains when `--trusted-domain` is supplied.
 - **GCP IAM exports**: GCP IAM checks depend on exported policy `bindings` and optional service account key metadata. External-member checks only flag user domains when `--org-domain` is supplied.
 - **Cross-cloud IAM comparison**: The comparison report does not infer new risk beyond the provider-specific analyzers. It groups supplied offline findings by common identity themes and uses the highest provider risk score as the comparison score.
+- **Webhook notifications**: Slack and Teams notifications are derived from saved JSON posture reports, not live cloud state. Use `--dry-run` to review payload contents before posting to an external incoming webhook.

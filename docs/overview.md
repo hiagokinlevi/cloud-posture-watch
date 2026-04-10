@@ -18,18 +18,22 @@ For GCP identity reviews, `k1n-posture scan-gcp-iam --input gcp-iam-policies.jso
 
 For cross-cloud identity reviews, `k1n-posture scan-iam-comparison --aws-input aws-iam-posture.json --azure-input azure-rbac.json --gcp-input gcp-iam-policies.json` reuses the offline IAM analyzers and writes one Markdown plus JSON comparison artifact. It groups findings by provider and by recurring identity themes: credential hygiene, privileged standing access, external or public access, and custom or wildcard permissions.
 
+For notification workflows, `k1n-posture notify-webhook --input posture.json --target slack|teams` reads a saved JSON posture report and sends a compact severity summary plus top findings to an incoming Slack or Microsoft Teams webhook. Use `--dry-run` to inspect the payload without making a network request.
+
 ## What this tool does
 
 1. **Collects** configuration state from cloud APIs using read-only credentials.
 2. **Analyzes** that state against rules covering exposure, logging, encryption, network access, and IAM posture.
 3. **Compares** live state against YAML baseline profiles to detect configuration drift.
 4. **Reports** findings in Markdown with severity ratings, risk scores, and remediation guidance.
+5. **Notifies** Slack or Teams channels from approved JSON posture artifacts when an operator supplies an HTTPS incoming webhook.
 
 ## What this tool does not do
 
 - It does not perform active exploitation or penetration testing.
 - It does not modify any cloud resources.
 - It does not store credentials or send data to external services.
+- It does not send webhook notifications unless `notify-webhook` is invoked without `--dry-run` and an HTTPS webhook URL is supplied.
 - It does not replace a comprehensive security review or threat model.
 
 ## Supported providers
