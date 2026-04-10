@@ -393,6 +393,96 @@ def scan_gcp_firewalls(ctx: click.Context, input_file: str, fail_on: str | None)
             sys.exit(1)
 
 
+@cli.command("scan-aws-iam")
+@click.option(
+    "--input",
+    "input_file",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to an offline AWS IAM posture JSON export.",
+)
+@click.option(
+    "--max-access-key-age-days",
+    default=90,
+    show_default=True,
+    type=int,
+    help="Maximum acceptable age for active IAM user access keys.",
+)
+@click.option(
+    "--fail-on",
+    "fail_on",
+    default=None,
+    type=click.Choice(["low", "medium", "high", "critical"], case_sensitive=False),
+    help="Exit with a non-zero code if any finding reaches this severity.",
+)
+@click.pass_context
+def scan_aws_iam(
+    ctx: click.Context,
+    input_file: str,
+    max_access_key_age_days: int,
+    fail_on: str | None,
+) -> None:
+    """
+    Analyze an offline AWS IAM posture export for root MFA and privilege risk.
+
+    This command does not require AWS credentials or boto3. It accepts JSON that
+    includes account summary evidence, credential-report-style users, and IAM
+    policy documents gathered by an authorized read-only operator.
+    """
+    import uuid
+    from analyzers.aws_iam_analyzer import (
+        AWSIAMAnalyzer,
+        load_aws_iam_snapshot_from_export,
+    )
+    from reports.posture_report import save_report
+    from schemas.posture import PostureFinding, PostureReport, Provider, Severity
+
+    snapshots = load_aws_iam_snapshot_from_export(input_file)
+    iam_report = AWSIAMAnalyzer(
+        max_access_key_age_days=max_access_key_age_days,
+    ).analyze(snapshots)
+    schema_findings = [
+        PostureFinding(
+            provider=Provider.AWS,
+            resource_type=f.resource_type,
+            resource_name=f.resource_name,
+            severity=Severity(f.severity.value),
+            flag=f.rule_id,
+            title=f.title,
+            recommendation=f.recommendation,
+        )
+        for f in iam_report.findings
+    ]
+
+    report = PostureReport(
+        run_id=str(uuid.uuid4())[:8],
+        provider=Provider.AWS,
+        baseline_name="offline-aws-iam-export",
+        total_resources=len(snapshots),
+        findings=schema_findings,
+    )
+    report_path = save_report(report, ctx.obj["output_dir"])
+
+    counts = report.finding_counts
+    click.echo(
+        f"AWS IAM export: {len(snapshots)} account snapshot(s), "
+        f"{len(iam_report.findings)} finding(s) | "
+        f"CRITICAL={counts['critical']} HIGH={counts['high']} "
+        f"MEDIUM={counts['medium']} LOW={counts['low']}"
+    )
+    click.echo(f"Report written to: {report_path}")
+
+    if fail_on:
+        severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+        threshold = severity_rank.get(fail_on.lower(), 3)
+        if any(severity_rank.get(f.severity.value, 0) >= threshold for f in report.findings):
+            click.echo(
+                f"Fail condition met: findings at or above '{fail_on}' severity detected.",
+                err=True,
+            )
+            sys.exit(1)
+
+
 @cli.command()
 @click.option(
     "--baseline",

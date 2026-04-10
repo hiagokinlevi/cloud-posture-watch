@@ -10,10 +10,12 @@ For Azure network reviews, `k1n-posture scan-azure-nsgs --input nsgs.json` accep
 
 For GCP network reviews, `k1n-posture scan-gcp-firewalls --input firewalls.json` accepts an offline `gcloud compute firewall-rules list --format=json` export and applies the same cross-cloud exposure checks to firewall rules without requiring live credentials.
 
+For AWS identity reviews, `k1n-posture scan-aws-iam --input aws-iam-posture.json` accepts an offline JSON bundle with IAM account-summary, credential-report, and policy-document evidence. It flags missing root MFA evidence, stale active IAM user access keys, and wildcard administrative policies without making live API calls.
+
 ## What this tool does
 
 1. **Collects** configuration state from cloud APIs using read-only credentials.
-2. **Analyzes** that state against rules covering exposure, logging, encryption, and network access.
+2. **Analyzes** that state against rules covering exposure, logging, encryption, network access, and IAM posture.
 3. **Compares** live state against YAML baseline profiles to detect configuration drift.
 4. **Reports** findings in Markdown with severity ratings, risk scores, and remediation guidance.
 

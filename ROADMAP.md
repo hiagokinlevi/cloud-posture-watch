@@ -28,7 +28,7 @@ This document outlines the planned development direction for `cloud-posture-watc
 
 ## v0.3 — Identity and access
 
-- [ ] AWS IAM: root account MFA, access key age, overly permissive policies
+- [x] AWS IAM: root account MFA, access key age, overly permissive policies
 - [ ] Azure RBAC: guest accounts, overly broad role assignments
 - [ ] GCP IAM: service account key age, primitive role usage
 - [ ] Cross-cloud IAM comparison report

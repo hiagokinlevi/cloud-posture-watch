@@ -12,6 +12,7 @@
 - **Exposure analysis** — identifies publicly accessible storage, compute, and network resources
 - **Logging gap detection** — checks whether audit trails, access logs, and flow logs are enabled
 - **VPC Flow Logs coverage** — flags AWS VPCs with missing flow logs, missing delivery destinations, missing rejected-traffic capture, or coarse aggregation windows
+- **Offline AWS IAM review** — scans exported IAM evidence for root MFA gaps, stale active user keys, and permissive policies
 - **Offline Azure NSG review** — scans exported `az network nsg list` JSON for public admin, database, and broad inbound rules
 - **Offline GCP firewall review** — scans exported `gcloud compute firewall-rules list` JSON for public admin, database, web, and broad inbound rules
 - **Encryption posture** — validates encryption at rest and in transit across storage and database services
@@ -68,6 +69,9 @@ k1n-posture report --input ./output/last_run.json --format markdown
 az network nsg list -o json > nsgs.json
 k1n-posture scan-azure-nsgs --input nsgs.json --fail-on high
 
+# Offline AWS IAM posture review
+k1n-posture scan-aws-iam --input aws-iam-posture.json --fail-on high
+
 # Offline GCP firewall exposure review
 gcloud compute firewall-rules list --format=json > firewalls.json
 k1n-posture scan-gcp-firewalls --input firewalls.json --fail-on high
@@ -103,6 +107,7 @@ Each **provider** module collects raw configuration state and returns typed data
 | AWS      | CloudTrail       | Enabled, multi-region, log validation               |
 | AWS      | Security Groups  | World-open SSH/RDP, public admin/database exposure  |
 | AWS      | VPC Flow Logs    | Missing telemetry, delivery destination gaps, reject-traffic gaps, coarse aggregation |
+| AWS      | IAM              | Offline export review for root MFA, stale active user access keys, and permissive policies |
 | Azure    | Storage Accounts | HTTPS-only, public blob access, encryption          |
 | Azure    | NSGs             | Offline export review for world-open admin, database, web, and broad inbound rules |
 | GCP      | Cloud Storage    | Uniform bucket-level access, public ACLs            |
@@ -130,11 +135,18 @@ All collectors use **read-only** permissions. No write operations are performed.
     "cloudtrail:DescribeTrails",
     "ec2:DescribeSecurityGroups",
     "ec2:DescribeFlowLogs",
-    "ec2:DescribeVpcs"
+    "ec2:DescribeVpcs",
+    "iam:GetAccountSummary",
+    "iam:GenerateCredentialReport",
+    "iam:GetCredentialReport",
+    "iam:ListPolicies",
+    "iam:GetPolicyVersion"
   ],
   "Resource": "*"
 }
 ```
+
+Offline AWS IAM review can use an approved JSON evidence bundle instead of live credentials. Include `account_summary.SummaryMap.AccountMFAEnabled`, credential-report user rows with `access_key_*_active` and `access_key_*_age_days`, and policy documents under `policies[].document`.
 
 ### Azure
 

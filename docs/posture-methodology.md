@@ -18,6 +18,7 @@ Provider collector  -->  Analyzer(s)  -->  Findings  -->  Report
    - `network_exposure` — checks AWS security groups, Azure NSGs, and GCP firewall rules for public network exposure
    - `logging_analyzer` — checks logging-related attributes
    - `flow_logs_analyzer` — checks AWS VPC Flow Logs coverage, delivery destinations, and telemetry fidelity
+   - `aws_iam_analyzer` — checks offline AWS IAM evidence for root MFA status, active access key age, and broadly permissive policy statements
    - `drift_analyzer` — loads a baseline YAML and compares expected vs. actual values
 3. **Findings** are converted to Pydantic `PostureFinding` models.
 4. **Report generator** serialises findings to Markdown (and optionally JSON).
@@ -51,3 +52,4 @@ The raw score is capped at 100. A score of 0 maps to `clear`, 1-19 maps to `low`
 - **Point-in-time**: Each run captures a snapshot; resources may change between assessments.
 - **Coverage**: Only the services and attributes listed in the supported services table are checked. Other services require additional collector modules.
 - **False positives**: Some checks (e.g., versioning_recommended) may trigger on intentionally configured environments. Use the baseline YAML to tune expectations.
+- **Offline IAM evidence**: AWS IAM checks depend on exported account-summary, credential-report, and policy JSON. Missing root MFA evidence is reported as a medium-confidence finding rather than proof that MFA is disabled.
