@@ -23,6 +23,7 @@ from datetime import datetime
 from pathlib import Path
 
 from schemas.posture import DriftItem, PostureFinding, PostureReport, Severity
+from schemas.risk import calculate_risk_score, classify_risk_score
 
 
 # Severity display metadata: (emoji-free label, Markdown badge)
@@ -36,15 +37,8 @@ _SEVERITY_LABELS: dict[str, str] = {
 
 
 def _risk_score(report: PostureReport) -> int:
-    """
-    Compute a simple 0-100 risk score based on finding severity distribution.
-
-    Weights: critical=10, high=5, medium=2, low=1
-    Score is capped at 100.
-    """
-    weights = {"critical": 10, "high": 5, "medium": 2, "low": 1, "info": 0}
-    raw = sum(weights.get(f.severity.value, 0) for f in report.findings)
-    return min(raw, 100)
+    """Compute the shared 0-100 risk score for a posture report."""
+    return calculate_risk_score(report.findings)
 
 
 def _format_finding(finding: PostureFinding, index: int) -> str:
@@ -89,6 +83,7 @@ def generate_markdown_report(report: PostureReport) -> str:
         Multi-line Markdown string suitable for writing to a .md file.
     """
     risk_score = _risk_score(report)
+    risk_band = classify_risk_score(risk_score)
     counts = report.finding_counts
     assessed_at = report.assessed_at.strftime("%Y-%m-%d %H:%M UTC")
 
@@ -106,6 +101,7 @@ def generate_markdown_report(report: PostureReport) -> str:
         "## Executive Summary",
         "",
         f"**Risk Score: {risk_score}/100**",
+        f"**Risk Level: {risk_band.name.upper()}**",
         "",
         "| Severity | Count |",
         "|----------|-------|",
@@ -118,28 +114,7 @@ def generate_markdown_report(report: PostureReport) -> str:
     ]
 
     # Overall posture statement
-    if risk_score == 0:
-        lines += [
-            "> No findings detected. The assessed resources meet the baseline requirements.",
-            "",
-        ]
-    elif risk_score < 20:
-        lines += [
-            "> Low risk. A small number of improvements are recommended.",
-            "",
-        ]
-    elif risk_score < 50:
-        lines += [
-            "> Moderate risk. Several controls are missing or misconfigured. "
-            "Review HIGH findings promptly.",
-            "",
-        ]
-    else:
-        lines += [
-            "> **High risk.** Critical or numerous high-severity findings detected. "
-            "Immediate remediation is advised.",
-            "",
-        ]
+    lines += [f"> {risk_band.summary}", ""]
 
     # Findings section
     lines += ["---", "", "## Findings", ""]

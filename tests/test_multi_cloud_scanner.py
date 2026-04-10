@@ -426,6 +426,15 @@ class TestMultiCloudScanReportProperties:
         r = MultiCloudScanReport(scan_id="x", scanned_at=datetime.now(tz=timezone.utc))
         assert "/100" in r.summary()
 
+    def test_summary_contains_risk_band(self):
+        pr = ProviderScanResult(provider="aws")
+        pr.findings = [_pf(severity="critical")] * 6
+        r = MultiCloudScanReport(
+            scan_id="x", scanned_at=datetime.now(tz=timezone.utc),
+            provider_results=[pr],
+        )
+        assert "(high)" in r.summary()
+
 
 # ---------------------------------------------------------------------------
 # _normalize_finding

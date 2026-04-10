@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from schemas.posture import DriftItem, PostureFinding, PostureReport
+from schemas.risk import SEVERITY_WEIGHTS, calculate_risk_score, classify_risk_score
 
 #: Current JSON schema version — increment on breaking changes
 SCHEMA_VERSION = "1.0"
@@ -73,10 +74,8 @@ def _drift_to_dict(item: DriftItem) -> dict[str, Any]:
 
 
 def _risk_score(report: PostureReport) -> int:
-    """0-100 risk score: critical=10, high=5, medium=2, low=1."""
-    weights = {"critical": 10, "high": 5, "medium": 2, "low": 1, "info": 0}
-    raw = sum(weights.get(f.severity.value, 0) for f in report.findings)
-    return min(raw, 100)
+    """Shared 0-100 posture risk score."""
+    return calculate_risk_score(report.findings)
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +94,8 @@ def generate_json_report(report: PostureReport, indent: int = 2) -> str:
         JSON string.
     """
     assessed_at_str = report.assessed_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+    risk_score = _risk_score(report)
+    risk_band = classify_risk_score(risk_score)
 
     doc: dict[str, Any] = {
         "schema_version":   SCHEMA_VERSION,
@@ -103,7 +104,12 @@ def generate_json_report(report: PostureReport, indent: int = 2) -> str:
         "assessed_at":      assessed_at_str,
         "baseline_name":    report.baseline_name,
         "total_resources":  report.total_resources,
-        "risk_score":       _risk_score(report),
+        "risk_score":       risk_score,
+        "risk_level":       risk_band.name,
+        "risk_model":       {
+            "max_score":        100,
+            "severity_weights": dict(SEVERITY_WEIGHTS),
+        },
         "finding_counts":   report.finding_counts,
         "findings":         [_finding_to_dict(f) for f in report.findings],
         "drift_items":      [_drift_to_dict(d) for d in report.drift_items],

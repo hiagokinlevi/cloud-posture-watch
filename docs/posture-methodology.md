@@ -33,7 +33,7 @@ The drift analyzer compares the collected state against the baseline using a con
 
 ## Risk scoring
 
-The risk score is a simple weighted sum:
+The risk score uses the shared `schemas.risk` model so CLI summaries and all report formats agree on the same numeric severity ratings:
 
 | Severity | Weight |
 |----------|--------|
@@ -43,7 +43,7 @@ The risk score is a simple weighted sum:
 | LOW      | 1      |
 | INFO     | 0      |
 
-The raw score is capped at 100. A score of 0 indicates no findings. A score above 50 indicates significant remediation work is needed.
+The raw score is capped at 100. A score of 0 maps to `clear`, 1-19 maps to `low`, 20-49 maps to `moderate`, and 50-100 maps to `high`. JSON exports include `risk_score`, `risk_level`, and the severity weights so downstream dashboards can preserve the same interpretation.
 
 ## Limitations
 

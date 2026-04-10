@@ -16,7 +16,7 @@
 - **Offline GCP firewall review** — scans exported `gcloud compute firewall-rules list` JSON for public admin, database, web, and broad inbound rules
 - **Encryption posture** — validates encryption at rest and in transit across storage and database services
 - **Configuration drift detection** — compares live state against YAML baselines and highlights deviations
-- **Risk scoring** — assigns severity-weighted risk flags per resource
+- **Risk scoring** — applies a shared numeric 0-100 severity model across CLI summaries, Markdown, JSON, and HTML reports
 - **Markdown reports** — human-readable output with findings, scores, and remediation recommendations
 - **Extensible baselines** — minimal / standard / strict profiles, all customizable
 
@@ -166,6 +166,8 @@ Reports are written to `./output/` (configurable via `OUTPUT_DIR`). Each run pro
 
 - `posture_<provider>_<timestamp>.md` — Markdown narrative report
 - `posture_<provider>_<timestamp>.json` — Machine-readable findings (for CI integration)
+
+The shared risk model weights findings as CRITICAL=10, HIGH=5, MEDIUM=2, LOW=1, and INFO=0, then caps the total score at 100. JSON exports include both `risk_score` and `risk_level` so downstream dashboards and CI gates can preserve the same posture interpretation as the human-readable reports.
 
 ---
 

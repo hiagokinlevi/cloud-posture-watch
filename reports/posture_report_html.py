@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from schemas.posture import DriftItem, PostureFinding, PostureReport, Severity
+from schemas.risk import calculate_risk_score, classify_risk_score
 
 
 # ---------------------------------------------------------------------------
@@ -111,9 +112,7 @@ def _badge(severity: str) -> str:
 
 
 def _risk_score(report: PostureReport) -> int:
-    weights = {"critical": 10, "high": 5, "medium": 2, "low": 1, "info": 0}
-    raw = sum(weights.get(f.severity.value, 0) for f in report.findings)
-    return min(raw, 100)
+    return calculate_risk_score(report.findings)
 
 
 def _risk_color(score: int) -> str:
@@ -147,6 +146,7 @@ def _html_header(report: PostureReport, assessed_at: str) -> str:
 
 def _html_summary(report: PostureReport) -> str:
     score = _risk_score(report)
+    risk_band = classify_risk_score(score)
     counts = report.finding_counts
     color = _risk_color(score)
 
@@ -162,22 +162,12 @@ def _html_summary(report: PostureReport) -> str:
             f'</div>'
         )
 
-    posture_msg = (
-        "No findings. Resources meet baseline requirements."
-        if score == 0 else
-        "Low risk. Minor improvements recommended."
-        if score < 20 else
-        "Moderate risk. Review HIGH findings promptly."
-        if score < 50 else
-        "High risk. Immediate remediation advised."
-    )
-
     return f"""
 <div class="section">
   <h2>Executive Summary</h2>
   <div>
     <div class="risk-score" style="color:{color};">{score}<span style="font-size:1rem;color:#666;">/100</span></div>
-    <div class="risk-label">{_e(posture_msg)}</div>
+    <div class="risk-label">{_e(risk_band.name.upper())}: {_e(risk_band.summary)}</div>
     <div style="font-size:0.82rem;color:#999;margin-top:4px;">
       Total resources assessed: <strong>{report.total_resources}</strong>
     </div>

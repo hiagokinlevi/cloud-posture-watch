@@ -22,7 +22,7 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] AWS VPC flow logs coverage and destination checks
 - [x] Azure NSG offline export scanner
 - [x] GCP Firewall rules collector and offline export scanner
-- [ ] Risk scoring model with numeric severity ratings
+- [x] Risk scoring model with numeric severity ratings
 
 ---
 

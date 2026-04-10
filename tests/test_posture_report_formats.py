@@ -137,6 +137,16 @@ class TestGenerateJsonReport:
         parsed = json.loads(generate_json_report(r))
         assert parsed["risk_score"] == 100
 
+    def test_risk_level_present(self):
+        r = _report(findings=[_finding(Severity.CRITICAL)] * 6)
+        parsed = json.loads(generate_json_report(r))
+        assert parsed["risk_level"] == "high"
+
+    def test_risk_model_exports_severity_weights(self):
+        parsed = json.loads(generate_json_report(_report()))
+        assert parsed["risk_model"]["severity_weights"]["critical"] == 10
+        assert parsed["risk_model"]["max_score"] == 100
+
     def test_finding_has_required_keys(self):
         r = _report(findings=[_finding()])
         parsed = json.loads(generate_json_report(r))
@@ -214,6 +224,11 @@ class TestGenerateHtmlReport:
         html = generate_html_report(r)
         # Risk score for one CRITICAL finding = 10
         assert ">10<" in html
+
+    def test_contains_risk_level(self):
+        r = _report(findings=[_finding(Severity.CRITICAL)] * 6)
+        html = generate_html_report(r)
+        assert "HIGH" in html
 
     def test_no_external_resources(self):
         """Self-contained report should not link to external CSS/JS."""

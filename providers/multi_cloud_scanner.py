@@ -34,6 +34,13 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from schemas.posture import PostureFinding, Provider, Severity
+from schemas.risk import (
+    SEVERITY_RANK as _SEVERITY_RANK,
+    SEVERITY_WEIGHTS as _SEVERITY_SCORE,
+    calculate_risk_score,
+    classify_risk_score,
+    severity_rank,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -133,24 +140,6 @@ class ProviderScanResult:
 # Multi-cloud scan report
 # ---------------------------------------------------------------------------
 
-# Risk weight per severity level
-_SEVERITY_SCORE: dict[str, int] = {
-    "critical": 10,
-    "high": 5,
-    "medium": 2,
-    "low": 1,
-    "info": 0,
-}
-
-_SEVERITY_RANK: dict[str, int] = {
-    "critical": 4,
-    "high": 3,
-    "medium": 2,
-    "low": 1,
-    "info": 0,
-}
-
-
 @dataclass
 class MultiCloudScanReport:
     """
@@ -201,8 +190,7 @@ class MultiCloudScanReport:
         Each finding contributes its severity weight. Score is capped at 100
         so the gauge stays interpretable regardless of finding volume.
         """
-        raw = sum(_SEVERITY_SCORE.get(f.severity.value, 0) for f in self.all_findings)
-        return min(raw, 100)
+        return calculate_risk_score(self.all_findings)
 
     @property
     def providers_scanned(self) -> list[str]:
@@ -224,7 +212,7 @@ class MultiCloudScanReport:
             return None
         return max(
             self.all_findings,
-            key=lambda f: _SEVERITY_RANK.get(f.severity.value, 0),
+            key=lambda f: severity_rank(f.severity),
         ).severity.value
 
     # ------------------------------------------------------------------
@@ -257,10 +245,11 @@ class MultiCloudScanReport:
     def summary(self) -> str:
         providers = ", ".join(p.upper() for p in self.providers_scanned) or "none"
         counts = self.finding_counts
+        risk_band = classify_risk_score(self.risk_score).name
         return (
             f"Multi-cloud scan [{self.scan_id}] — {providers} | "
             f"Resources: {self.total_resources} | "
-            f"Risk: {self.risk_score}/100 | "
+            f"Risk: {self.risk_score}/100 ({risk_band}) | "
             f"CRITICAL={counts['critical']} "
             f"HIGH={counts['high']} "
             f"MEDIUM={counts['medium']} "
