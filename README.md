@@ -14,6 +14,7 @@
 - **VPC Flow Logs coverage** — flags AWS VPCs with missing flow logs, missing delivery destinations, missing rejected-traffic capture, or coarse aggregation windows
 - **Offline AWS IAM review** — scans exported IAM evidence for root MFA gaps, stale active user keys, and permissive policies
 - **Offline AWS RDS review** — scans exported RDS instance and cluster evidence for missing storage encryption and public database exposure
+- **Offline Azure SQL review** — scans exported logical server and database evidence for disabled TDE, public network access, and broad firewall rules
 - **Offline Azure RBAC review** — scans role assignment exports for broad Owner/Contributor access, guest privileged assignments, service principal Owner grants, and wildcard custom roles
 - **Offline GCP IAM review** — scans exported IAM policies for primitive roles, public principals, external sensitive-role users, default service accounts, and stale service account keys
 - **Cross-cloud IAM comparison** — combines offline AWS, Azure, and GCP identity findings into one Markdown and JSON review artifact
@@ -87,6 +88,12 @@ k1n-posture scan-aws-rds --input aws-rds-instances.json --fail-on high
 az role assignment list --all -o json > azure-rbac.json
 k1n-posture scan-azure-rbac --input azure-rbac.json --trusted-domain example.com --fail-on high
 
+# Offline Azure SQL encryption and firewall review
+az sql server list -o json > azure-sql-servers.json
+az sql db list --server prod-sql --resource-group rg-prod -o json > azure-sql-databases.json
+# Merge the approved exports into one file shaped as {"servers": [...], "databases": [...]}
+k1n-posture scan-azure-sql --input azure-sql-export.json --fail-on high
+
 # Offline GCP IAM posture review
 k1n-posture scan-gcp-iam --input gcp-iam-policies.json --org-domain example.com --fail-on high
 
@@ -159,6 +166,7 @@ Each **provider** module collects raw configuration state and returns typed data
 | AWS      | VPC Flow Logs    | Missing telemetry, delivery destination gaps, reject-traffic gaps, coarse aggregation |
 | AWS      | IAM              | Offline export review for root MFA, stale active user access keys, and permissive policies |
 | AWS      | RDS              | Offline export review for storage encryption, public accessibility, and public DB subnet group risk |
+| Azure    | SQL Database     | Offline export review for TDE disablement, public network access, Azure-services firewall access, and broad public firewall ranges |
 | Azure    | RBAC             | Offline export review for broad Owner/Contributor scope, guest privileged assignments, service principal Owner grants, and wildcard custom roles |
 | Azure    | Storage Accounts | HTTPS-only, public blob access, encryption          |
 | Azure    | NSGs             | Offline export review for world-open admin, database, web, and broad inbound rules |
@@ -208,6 +216,8 @@ Offline AWS RDS review can use an approved JSON export from `aws rds describe-db
 Requires the built-in **Reader** role on the target subscription.
 
 Offline Azure RBAC review can use an approved JSON export instead of live credentials. Export role assignments with `az role assignment list --all -o json`; when reviewing wildcard custom roles, wrap the export as `{"assignments": [...], "role_definitions": [...]}` and include role definitions from `az role definition list --custom-role-only true -o json`.
+
+Offline Azure SQL review can use approved JSON evidence instead of live credentials. Supply one JSON file with `servers` and `databases` arrays, for example by combining `az sql server list -o json`, per-server firewall rule exports, and `az sql db list --server <name> --resource-group <rg> -o json` results into a single approved bundle. The analyzer checks `publicNetworkAccess`, firewall rule ranges, and Transparent Data Encryption status when present.
 
 ### GCP
 

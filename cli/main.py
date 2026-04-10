@@ -563,6 +563,83 @@ def scan_aws_rds(
             sys.exit(1)
 
 
+@cli.command("scan-azure-sql")
+@click.option(
+    "--input",
+    "input_file",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to an offline Azure SQL export containing server and database evidence.",
+)
+@click.option(
+    "--fail-on",
+    "fail_on",
+    default=None,
+    type=click.Choice(["low", "medium", "high", "critical"], case_sensitive=False),
+    help="Exit with a non-zero code if any finding reaches this severity.",
+)
+@click.pass_context
+def scan_azure_sql(
+    ctx: click.Context,
+    input_file: str,
+    fail_on: str | None,
+) -> None:
+    """
+    Analyze an offline Azure SQL export for encryption and firewall exposure risk.
+
+    This command does not require Azure credentials or the Azure SDK. It accepts
+    JSON exports with `servers` and `databases` arrays, including common wrapped
+    response shapes, gathered by an authorized read-only operator.
+    """
+    import uuid
+    from analyzers.azure_sql_analyzer import AzureSQLAnalyzer, load_azure_sql_from_export
+    from reports.posture_report import save_report
+    from schemas.posture import PostureFinding, PostureReport, Provider, Severity
+
+    servers, databases = load_azure_sql_from_export(input_file)
+    sql_report = AzureSQLAnalyzer().analyze(servers, databases)
+    schema_findings = [
+        PostureFinding(
+            provider=Provider.AZURE,
+            resource_type=f.resource_type,
+            resource_name=f.resource_name,
+            severity=Severity(f.severity.value),
+            flag=f.check_id,
+            title=f.title,
+            recommendation=f.recommendation,
+        )
+        for f in sql_report.findings
+    ]
+
+    report = PostureReport(
+        run_id=str(uuid.uuid4())[:8],
+        provider=Provider.AZURE,
+        baseline_name="offline-azure-sql-export",
+        total_resources=len(servers) + len(databases),
+        findings=schema_findings,
+    )
+    report_path = save_report(report, ctx.obj["output_dir"])
+
+    counts = report.finding_counts
+    click.echo(
+        f"Azure SQL export: {len(servers)} server(s), {len(databases)} database(s), "
+        f"{len(sql_report.findings)} finding(s), risk_score={sql_report.risk_score} | "
+        f"CRITICAL={counts['critical']} HIGH={counts['high']} "
+        f"MEDIUM={counts['medium']} LOW={counts['low']}"
+    )
+    click.echo(f"Report written to: {report_path}")
+
+    if fail_on:
+        severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+        threshold = severity_rank.get(fail_on.lower(), 3)
+        if any(severity_rank.get(f.severity.value, 0) >= threshold for f in report.findings):
+            click.echo(
+                f"Fail condition met: findings at or above '{fail_on}' severity detected.",
+                err=True,
+            )
+            sys.exit(1)
+
+
 @cli.command("scan-gcp-iam")
 @click.option(
     "--input",

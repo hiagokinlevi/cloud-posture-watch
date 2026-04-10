@@ -20,6 +20,7 @@ Provider collector  -->  Analyzer(s)  -->  Findings  -->  Report
    - `flow_logs_analyzer` — checks AWS VPC Flow Logs coverage, delivery destinations, and telemetry fidelity
    - `aws_iam_analyzer` — checks offline AWS IAM evidence for root MFA status, active access key age, and broadly permissive policy statements
    - `aws_rds_analyzer` — checks offline AWS RDS instance and cluster evidence for storage encryption, public accessibility, and public DB subnet group placement
+   - `azure_sql_analyzer` — checks offline Azure SQL server and database evidence for Transparent Data Encryption disablement, public network access, and broad firewall rules
    - `azure_rbac_analyzer` — checks offline Azure RBAC assignments for broad Owner/Contributor scope, guest privileged access, service principal Owner grants, User Access Administrator delegation risk, and wildcard custom roles
    - `gcp_iam_analyzer` — checks offline GCP IAM policy evidence for primitive roles, public principals, external sensitive-role users, default service accounts, broad IAM-admin roles, and stale service account keys
    - `iam_comparison_analyzer` — normalizes AWS, Azure, and GCP offline IAM analyzer results into one cross-cloud Markdown and JSON comparison report
@@ -66,6 +67,7 @@ The v1 posture-report JSON contract is exposed with `k1n-posture json-schema`. G
 - **Offline IAM evidence**: AWS IAM checks depend on exported account-summary, credential-report, and policy JSON. Missing root MFA evidence is reported as a medium-confidence finding rather than proof that MFA is disabled.
 - **Offline RDS evidence**: AWS RDS checks depend on exported DB instance and optional DB cluster JSON. Public subnet-group detection only works when subnet details are present in the export.
 - **Azure RBAC exports**: Azure RBAC checks depend on exported role assignments and optional custom role definitions. External-principal checks only compare user principal domains when `--trusted-domain` is supplied.
+- **Azure SQL exports**: Azure SQL checks depend on an approved export bundle with `servers` and `databases` arrays. Firewall-rule checks only work when firewall ranges are included in the server objects, and TDE findings depend on database-level encryption status being present in the export.
 - **GCP IAM exports**: GCP IAM checks depend on exported policy `bindings` and optional service account key metadata. External-member checks only flag user domains when `--org-domain` is supplied.
 - **Cross-cloud IAM comparison**: The comparison report does not infer new risk beyond the provider-specific analyzers. It groups supplied offline findings by common identity themes and uses the highest provider risk score as the comparison score.
 - **Webhook notifications**: Slack and Teams notifications are derived from saved JSON posture reports, not live cloud state. Use `--dry-run` to review payload contents before posting to an external incoming webhook.

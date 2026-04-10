@@ -40,6 +40,7 @@ For scheduled monitoring workflows, `k1n-posture watch-report --input posture.js
 - It does not store credentials or send data to external services.
 - It does not send webhook notifications unless `notify-webhook` is invoked without `--dry-run` and an HTTPS webhook URL is supplied.
 - It does not schedule itself; use cron, GitHub Actions, or another runner to refresh reports and invoke `watch-report`.
+- Offline Azure SQL review accepts approved server and database exports so teams can validate TDE and firewall posture before enabling public connectivity exceptions.
 - It does not replace a comprehensive security review or threat model.
 
 ## Supported providers
