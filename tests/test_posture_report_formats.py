@@ -29,6 +29,11 @@ from reports.posture_report_json import (
     generate_json_report,
     save_json_report,
 )
+from reports.posture_report_schema import (
+    JSON_SCHEMA_ID,
+    POSTURE_REPORT_JSON_SCHEMA,
+    validate_posture_report_json_contract,
+)
 from schemas.posture import (
     DriftItem,
     Importance,
@@ -106,6 +111,37 @@ class TestGenerateJsonReport:
     def test_schema_version_present(self):
         parsed = json.loads(generate_json_report(_report()))
         assert parsed["schema_version"] == SCHEMA_VERSION
+
+    def test_schema_id_present(self):
+        parsed = json.loads(generate_json_report(_report()))
+        assert parsed["$schema"] == JSON_SCHEMA_ID
+
+    def test_generated_report_matches_stable_contract(self):
+        r = _report(findings=[_finding()], drift=[_drift()])
+        parsed = json.loads(generate_json_report(r))
+        assert validate_posture_report_json_contract(parsed) == []
+
+    def test_contract_validator_reports_missing_fields(self):
+        parsed = json.loads(generate_json_report(_report()))
+        parsed.pop("findings")
+        assert validate_posture_report_json_contract(parsed) == [
+            "missing required top-level field: findings",
+            "findings must be an array",
+        ]
+
+    def test_machine_readable_schema_exports_required_v1_fields(self):
+        required = POSTURE_REPORT_JSON_SCHEMA["required"]
+        for key in [
+            "$schema",
+            "schema_version",
+            "risk_score",
+            "risk_level",
+            "risk_model",
+            "finding_counts",
+            "findings",
+            "drift_items",
+        ]:
+            assert key in required
 
     def test_provider_present(self):
         parsed = json.loads(generate_json_report(_report()))
@@ -443,3 +479,13 @@ class TestPostureReportCmd:
                 json_end = json_str.rfind("}") + 1
                 parsed = json.loads(json_str[:json_end])
                 assert "provider" in parsed
+
+    def test_json_schema_command_prints_schema_contract(self):
+        from cli.main import cli
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["json-schema"])
+        assert result.exit_code == 0, result.output
+        parsed = json.loads(result.output)
+        assert parsed["$id"] == JSON_SCHEMA_ID
+        assert parsed["properties"]["schema_version"]["const"] == SCHEMA_VERSION

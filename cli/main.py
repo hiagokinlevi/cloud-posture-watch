@@ -889,6 +889,14 @@ def list_checks(ctx: click.Context) -> None:
         click.echo(f"{control:<45} {attr:<35} {importance}")
 
 
+@cli.command("json-schema")
+def json_schema() -> None:
+    """Print the stable v1 posture-report JSON schema."""
+    from reports.posture_report_schema import POSTURE_REPORT_JSON_SCHEMA
+
+    click.echo(json.dumps(POSTURE_REPORT_JSON_SCHEMA, indent=2))
+
+
 @cli.command("notify-webhook")
 @click.option(
     "--input",

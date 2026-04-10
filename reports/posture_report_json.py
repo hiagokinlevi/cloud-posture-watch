@@ -34,11 +34,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from reports.posture_report_schema import JSON_SCHEMA_ID, SCHEMA_VERSION
 from schemas.posture import DriftItem, PostureFinding, PostureReport
 from schemas.risk import SEVERITY_WEIGHTS, calculate_risk_score, classify_risk_score
-
-#: Current JSON schema version — increment on breaking changes
-SCHEMA_VERSION = "1.0"
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +96,7 @@ def generate_json_report(report: PostureReport, indent: int = 2) -> str:
     risk_band = classify_risk_score(risk_score)
 
     doc: dict[str, Any] = {
+        "$schema":          JSON_SCHEMA_ID,
         "schema_version":   SCHEMA_VERSION,
         "run_id":           report.run_id,
         "provider":         report.provider.value,

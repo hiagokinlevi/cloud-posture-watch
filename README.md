@@ -21,6 +21,7 @@
 - **Encryption posture** — validates encryption at rest and in transit across storage and database services
 - **Configuration drift detection** — compares live state against YAML baselines and highlights deviations
 - **Risk scoring** — applies a shared numeric 0-100 severity model across CLI summaries, Markdown, JSON, and HTML reports
+- **Stable JSON contract** — publishes a v1 posture-report schema for downstream dashboards and CI tooling
 - **Markdown reports** — human-readable output with findings, scores, and remediation recommendations
 - **Slack and Teams webhooks** — sends posture-report summaries to incoming webhooks or prints dry-run payloads for approval
 - **Extensible baselines** — minimal / standard / strict profiles, all customizable
@@ -107,6 +108,9 @@ k1n-posture notify-webhook \
   --input ./output/posture_aws_latest.json \
   --target teams \
   --dry-run
+
+# Print the stable posture-report JSON schema
+k1n-posture json-schema
 ```
 
 ---
@@ -218,6 +222,8 @@ Reports are written to `./output/` (configurable via `OUTPUT_DIR`). Each run pro
 - `posture_<provider>_<timestamp>.json` — Machine-readable findings (for CI integration)
 
 The shared risk model weights findings as CRITICAL=10, HIGH=5, MEDIUM=2, LOW=1, and INFO=0, then caps the total score at 100. JSON exports include both `risk_score` and `risk_level` so downstream dashboards and CI gates can preserve the same posture interpretation as the human-readable reports.
+
+JSON posture exports include `$schema` and `schema_version` fields. `k1n-posture json-schema` prints the v1 contract for downstream validators and dashboards, including required report metadata, finding counts, finding records, drift records, and the risk-model fields.
 
 Webhook notifications use saved JSON posture reports as input. `k1n-posture notify-webhook --target slack|teams` builds a provider summary, severity counts, and the top findings, then posts it to an HTTPS incoming webhook. Use `--dry-run` during change review to print the exact payload without sending data or exposing a webhook secret in command output.
 

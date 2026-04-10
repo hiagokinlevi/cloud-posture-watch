@@ -39,7 +39,7 @@ This document outlines the planned development direction for `cloud-posture-watc
 
 - [ ] Watch mode: re-assess on a schedule and alert on new findings
 - [x] Webhook output for Slack / Teams notifications
-- [ ] JSON output schema stable for downstream tooling integration
+- [x] JSON output schema stable for downstream tooling integration
 - [ ] GitHub Actions marketplace action
 
 ---

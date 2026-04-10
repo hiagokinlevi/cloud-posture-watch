@@ -25,7 +25,8 @@ Provider collector  -->  Analyzer(s)  -->  Findings  -->  Report
    - `drift_analyzer` — loads a baseline YAML and compares expected vs. actual values
 3. **Findings** are converted to Pydantic `PostureFinding` models.
 4. **Report generator** serialises findings to Markdown (and optionally JSON).
-5. **Webhook notification** can summarize an approved JSON posture report for Slack or Teams. Payloads include provider, run ID, severity counts, and the top findings. The webhook URL is supplied only at send time and is never printed in success output.
+5. **JSON schema contract** tags posture JSON reports with `$schema` and `schema_version`, and `k1n-posture json-schema` prints the stable v1 contract for downstream validators.
+6. **Webhook notification** can summarize an approved JSON posture report for Slack or Teams. Payloads include provider, run ID, severity counts, and the top findings. The webhook URL is supplied only at send time and is never printed in success output.
 
 ## Baseline profiles
 
@@ -49,6 +50,10 @@ The risk score uses the shared `schemas.risk` model so CLI summaries and all rep
 | INFO     | 0      |
 
 The raw score is capped at 100. A score of 0 maps to `clear`, 1-19 maps to `low`, 20-49 maps to `moderate`, and 50-100 maps to `high`. JSON exports include `risk_score`, `risk_level`, and the severity weights so downstream dashboards can preserve the same interpretation.
+
+## JSON schema stability
+
+The v1 posture-report JSON contract is exposed with `k1n-posture json-schema`. Generated JSON reports include `$schema`, `schema_version`, `run_id`, `provider`, `assessed_at`, `baseline_name`, `total_resources`, `risk_score`, `risk_level`, `risk_model`, `finding_counts`, `findings`, and `drift_items`. New non-breaking fields may be added, but the v1 required fields remain stable for downstream tooling.
 
 ## Limitations
 
