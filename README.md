@@ -13,6 +13,7 @@
 - **Logging gap detection** — checks whether audit trails, access logs, and flow logs are enabled
 - **VPC Flow Logs coverage** — flags AWS VPCs with missing flow logs, missing delivery destinations, missing rejected-traffic capture, or coarse aggregation windows
 - **Offline AWS IAM review** — scans exported IAM evidence for root MFA gaps, stale active user keys, and permissive policies
+- **Offline Azure RBAC review** — scans role assignment exports for broad Owner/Contributor access, guest privileged assignments, service principal Owner grants, and wildcard custom roles
 - **Offline GCP IAM review** — scans exported IAM policies for primitive roles, public principals, external sensitive-role users, default service accounts, and stale service account keys
 - **Offline Azure NSG review** — scans exported `az network nsg list` JSON for public admin, database, and broad inbound rules
 - **Offline GCP firewall review** — scans exported `gcloud compute firewall-rules list` JSON for public admin, database, web, and broad inbound rules
@@ -73,6 +74,10 @@ k1n-posture scan-azure-nsgs --input nsgs.json --fail-on high
 # Offline AWS IAM posture review
 k1n-posture scan-aws-iam --input aws-iam-posture.json --fail-on high
 
+# Offline Azure RBAC posture review
+az role assignment list --all -o json > azure-rbac.json
+k1n-posture scan-azure-rbac --input azure-rbac.json --trusted-domain example.com --fail-on high
+
 # Offline GCP IAM posture review
 k1n-posture scan-gcp-iam --input gcp-iam-policies.json --org-domain example.com --fail-on high
 
@@ -112,6 +117,7 @@ Each **provider** module collects raw configuration state and returns typed data
 | AWS      | Security Groups  | World-open SSH/RDP, public admin/database exposure  |
 | AWS      | VPC Flow Logs    | Missing telemetry, delivery destination gaps, reject-traffic gaps, coarse aggregation |
 | AWS      | IAM              | Offline export review for root MFA, stale active user access keys, and permissive policies |
+| Azure    | RBAC             | Offline export review for broad Owner/Contributor scope, guest privileged assignments, service principal Owner grants, and wildcard custom roles |
 | Azure    | Storage Accounts | HTTPS-only, public blob access, encryption          |
 | Azure    | NSGs             | Offline export review for world-open admin, database, web, and broad inbound rules |
 | GCP      | Cloud Storage    | Uniform bucket-level access, public ACLs            |
@@ -156,6 +162,8 @@ Offline AWS IAM review can use an approved JSON evidence bundle instead of live 
 ### Azure
 
 Requires the built-in **Reader** role on the target subscription.
+
+Offline Azure RBAC review can use an approved JSON export instead of live credentials. Export role assignments with `az role assignment list --all -o json`; when reviewing wildcard custom roles, wrap the export as `{"assignments": [...], "role_definitions": [...]}` and include role definitions from `az role definition list --custom-role-only true -o json`.
 
 ### GCP
 

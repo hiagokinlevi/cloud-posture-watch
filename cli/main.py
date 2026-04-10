@@ -589,6 +589,105 @@ def scan_gcp_iam(
             sys.exit(1)
 
 
+@cli.command("scan-azure-rbac")
+@click.option(
+    "--input",
+    "input_file",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to an offline Azure RBAC role assignment JSON export.",
+)
+@click.option(
+    "--trusted-domain",
+    "trusted_domains",
+    multiple=True,
+    help="Trusted user principal domain for external-principal checks. Repeatable.",
+)
+@click.option(
+    "--skip-external-principals",
+    is_flag=True,
+    default=False,
+    help="Disable external and guest principal checks.",
+)
+@click.option(
+    "--fail-on",
+    "fail_on",
+    default=None,
+    type=click.Choice(["low", "medium", "high", "critical"], case_sensitive=False),
+    help="Exit with a non-zero code if any finding reaches this severity.",
+)
+@click.pass_context
+def scan_azure_rbac(
+    ctx: click.Context,
+    input_file: str,
+    trusted_domains: tuple[str, ...],
+    skip_external_principals: bool,
+    fail_on: str | None,
+) -> None:
+    """
+    Analyze an offline Azure RBAC export for broad standing access.
+
+    This command does not require Azure credentials or the Azure SDK. Export
+    role assignments with `az role assignment list --all -o json`, and include
+    optional custom role definitions under `role_definitions` when wildcard
+    custom-role review is required.
+    """
+    import uuid
+    from analyzers.azure_rbac_analyzer import (
+        AzureRBACAnalyzer,
+        load_azure_rbac_from_export,
+    )
+    from reports.posture_report import save_report
+    from schemas.posture import PostureFinding, PostureReport, Provider, Severity
+
+    assignments, role_definitions = load_azure_rbac_from_export(input_file)
+    rbac_report = AzureRBACAnalyzer(
+        trusted_domains=list(trusted_domains) or None,
+        check_external_principals=not skip_external_principals,
+    ).analyze(assignments, role_definitions)
+    schema_findings = [
+        PostureFinding(
+            provider=Provider.AZURE,
+            resource_type=f.resource_type,
+            resource_name=f.resource_name,
+            severity=Severity(f.severity.value),
+            flag=f.check_id,
+            title=f.title,
+            recommendation=f.recommendation,
+        )
+        for f in rbac_report.findings
+    ]
+
+    report = PostureReport(
+        run_id=str(uuid.uuid4())[:8],
+        provider=Provider.AZURE,
+        baseline_name="offline-azure-rbac-export",
+        total_resources=len(assignments),
+        findings=schema_findings,
+    )
+    report_path = save_report(report, ctx.obj["output_dir"])
+
+    counts = report.finding_counts
+    click.echo(
+        f"Azure RBAC export: {len(assignments)} assignment(s), "
+        f"{len(role_definitions)} role definition(s), "
+        f"{len(rbac_report.findings)} finding(s), risk_score={rbac_report.risk_score} | "
+        f"CRITICAL={counts['critical']} HIGH={counts['high']} "
+        f"MEDIUM={counts['medium']} LOW={counts['low']}"
+    )
+    click.echo(f"Report written to: {report_path}")
+
+    if fail_on:
+        severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+        threshold = severity_rank.get(fail_on.lower(), 3)
+        if any(severity_rank.get(f.severity.value, 0) >= threshold for f in report.findings):
+            click.echo(
+                f"Fail condition met: findings at or above '{fail_on}' severity detected.",
+                err=True,
+            )
+            sys.exit(1)
+
+
 @cli.command()
 @click.option(
     "--baseline",
