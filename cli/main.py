@@ -688,6 +688,136 @@ def scan_azure_rbac(
             sys.exit(1)
 
 
+@cli.command("scan-iam-comparison")
+@click.option(
+    "--aws-input",
+    type=click.Path(exists=True),
+    default=None,
+    help="Path to an offline AWS IAM posture JSON export.",
+)
+@click.option(
+    "--azure-input",
+    type=click.Path(exists=True),
+    default=None,
+    help="Path to an offline Azure RBAC role assignment JSON export.",
+)
+@click.option(
+    "--gcp-input",
+    type=click.Path(exists=True),
+    default=None,
+    help="Path to an offline GCP IAM policy JSON export.",
+)
+@click.option(
+    "--trusted-domain",
+    "trusted_domains",
+    multiple=True,
+    help="Trusted Azure user principal domain for external-principal checks. Repeatable.",
+)
+@click.option(
+    "--org-domain",
+    "org_domains",
+    multiple=True,
+    help="Trusted GCP organization email domain for external-member checks. Repeatable.",
+)
+@click.option(
+    "--max-access-key-age-days",
+    default=90,
+    show_default=True,
+    type=int,
+    help="Maximum acceptable age for active AWS IAM user access keys.",
+)
+@click.option(
+    "--max-service-account-key-age-days",
+    default=90,
+    show_default=True,
+    type=int,
+    help="Maximum acceptable age for exported GCP service account keys.",
+)
+@click.option(
+    "--fail-on",
+    "fail_on",
+    default=None,
+    type=click.Choice(["low", "medium", "high", "critical"], case_sensitive=False),
+    help="Exit with a non-zero code if any finding reaches this severity.",
+)
+@click.pass_context
+def scan_iam_comparison(
+    ctx: click.Context,
+    aws_input: str | None,
+    azure_input: str | None,
+    gcp_input: str | None,
+    trusted_domains: tuple[str, ...],
+    org_domains: tuple[str, ...],
+    max_access_key_age_days: int,
+    max_service_account_key_age_days: int,
+    fail_on: str | None,
+) -> None:
+    """
+    Build one offline comparison report across AWS IAM, Azure RBAC, and GCP IAM.
+
+    Provide evidence for at least two clouds. The command runs the existing
+    provider-specific offline analyzers and writes both Markdown and JSON
+    comparison artifacts to the configured output directory.
+    """
+    from analyzers.aws_iam_analyzer import AWSIAMAnalyzer, load_aws_iam_snapshot_from_export
+    from analyzers.azure_rbac_analyzer import AzureRBACAnalyzer, load_azure_rbac_from_export
+    from analyzers.gcp_iam_analyzer import GCPIAMAnalyzer, load_gcp_iam_policies_from_export
+    from analyzers.iam_comparison_analyzer import (
+        build_iam_comparison_report,
+        save_iam_comparison_report,
+    )
+
+    provided_inputs = [path for path in (aws_input, azure_input, gcp_input) if path]
+    if len(provided_inputs) < 2:
+        raise click.UsageError("Provide at least two of --aws-input, --azure-input, and --gcp-input.")
+
+    aws_report = None
+    if aws_input:
+        aws_snapshots = load_aws_iam_snapshot_from_export(aws_input)
+        aws_report = AWSIAMAnalyzer(
+            max_access_key_age_days=max_access_key_age_days,
+        ).analyze(aws_snapshots)
+
+    azure_report = None
+    if azure_input:
+        assignments, role_definitions = load_azure_rbac_from_export(azure_input)
+        azure_report = AzureRBACAnalyzer(
+            trusted_domains=list(trusted_domains) or None,
+        ).analyze(assignments, role_definitions)
+
+    gcp_report = None
+    if gcp_input:
+        policies = load_gcp_iam_policies_from_export(gcp_input)
+        gcp_report = GCPIAMAnalyzer(
+            org_domains=list(org_domains) or None,
+            max_key_age_days=max_service_account_key_age_days,
+        ).analyze(policies)
+
+    comparison = build_iam_comparison_report(
+        aws_report=aws_report,
+        azure_report=azure_report,
+        gcp_report=gcp_report,
+    )
+    markdown_path, json_path = save_iam_comparison_report(comparison, ctx.obj["output_dir"])
+    click.echo(
+        f"IAM comparison: {len(comparison.providers)} provider(s), "
+        f"{comparison.total_findings} finding(s), "
+        f"risk_score={comparison.cross_cloud_risk_score}"
+    )
+    click.echo(f"Markdown report written to: {markdown_path}")
+    click.echo(f"JSON report written to: {json_path}")
+
+    if fail_on:
+        severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+        threshold = severity_rank.get(fail_on.lower(), 3)
+        if any(severity_rank.get(finding.severity, 0) >= threshold for finding in comparison.findings):
+            click.echo(
+                f"Fail condition met: findings at or above '{fail_on}' severity detected.",
+                err=True,
+            )
+            sys.exit(1)
+
+
 @cli.command()
 @click.option(
     "--baseline",

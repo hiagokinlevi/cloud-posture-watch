@@ -15,6 +15,7 @@
 - **Offline AWS IAM review** — scans exported IAM evidence for root MFA gaps, stale active user keys, and permissive policies
 - **Offline Azure RBAC review** — scans role assignment exports for broad Owner/Contributor access, guest privileged assignments, service principal Owner grants, and wildcard custom roles
 - **Offline GCP IAM review** — scans exported IAM policies for primitive roles, public principals, external sensitive-role users, default service accounts, and stale service account keys
+- **Cross-cloud IAM comparison** — combines offline AWS, Azure, and GCP identity findings into one Markdown and JSON review artifact
 - **Offline Azure NSG review** — scans exported `az network nsg list` JSON for public admin, database, and broad inbound rules
 - **Offline GCP firewall review** — scans exported `gcloud compute firewall-rules list` JSON for public admin, database, web, and broad inbound rules
 - **Encryption posture** — validates encryption at rest and in transit across storage and database services
@@ -80,6 +81,15 @@ k1n-posture scan-azure-rbac --input azure-rbac.json --trusted-domain example.com
 
 # Offline GCP IAM posture review
 k1n-posture scan-gcp-iam --input gcp-iam-policies.json --org-domain example.com --fail-on high
+
+# Cross-cloud offline IAM comparison
+k1n-posture scan-iam-comparison \
+  --aws-input aws-iam-posture.json \
+  --azure-input azure-rbac.json \
+  --gcp-input gcp-iam-policies.json \
+  --trusted-domain example.com \
+  --org-domain example.com \
+  --fail-on high
 
 # Offline GCP firewall exposure review
 gcloud compute firewall-rules list --format=json > firewalls.json

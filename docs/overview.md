@@ -16,6 +16,8 @@ For Azure identity reviews, `k1n-posture scan-azure-rbac --input azure-rbac.json
 
 For GCP identity reviews, `k1n-posture scan-gcp-iam --input gcp-iam-policies.json --org-domain example.com` accepts offline IAM policy exports with optional service account key metadata. It flags primitive Owner/Editor/Viewer grants, public principals, external users in sensitive roles, default service accounts, broad IAM-admin roles, and stale service account keys without making live API calls.
 
+For cross-cloud identity reviews, `k1n-posture scan-iam-comparison --aws-input aws-iam-posture.json --azure-input azure-rbac.json --gcp-input gcp-iam-policies.json` reuses the offline IAM analyzers and writes one Markdown plus JSON comparison artifact. It groups findings by provider and by recurring identity themes: credential hygiene, privileged standing access, external or public access, and custom or wildcard permissions.
+
 ## What this tool does
 
 1. **Collects** configuration state from cloud APIs using read-only credentials.
