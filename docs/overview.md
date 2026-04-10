@@ -12,6 +12,8 @@ For GCP network reviews, `k1n-posture scan-gcp-firewalls --input firewalls.json`
 
 For AWS identity reviews, `k1n-posture scan-aws-iam --input aws-iam-posture.json` accepts an offline JSON bundle with IAM account-summary, credential-report, and policy-document evidence. It flags missing root MFA evidence, stale active IAM user access keys, and wildcard administrative policies without making live API calls.
 
+For GCP identity reviews, `k1n-posture scan-gcp-iam --input gcp-iam-policies.json --org-domain example.com` accepts offline IAM policy exports with optional service account key metadata. It flags primitive Owner/Editor/Viewer grants, public principals, external users in sensitive roles, default service accounts, broad IAM-admin roles, and stale service account keys without making live API calls.
+
 ## What this tool does
 
 1. **Collects** configuration state from cloud APIs using read-only credentials.

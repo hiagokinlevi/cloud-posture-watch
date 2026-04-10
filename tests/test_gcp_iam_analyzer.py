@@ -18,10 +18,12 @@ Coverage targets
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
 # Allow running tests directly from the repo root.
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -36,7 +38,9 @@ from analyzers.gcp_iam_analyzer import (
     _CHECK_WEIGHTS,
     _PRIMITIVE_ROLES,
     _SENSITIVE_ROLES,
+    load_gcp_iam_policies_from_export,
 )
+from cli.main import cli
 
 
 # ===========================================================================
@@ -744,3 +748,74 @@ class TestCleanPolicy:
     def test_finding_for_resource_returns_empty_for_clean(self):
         r = _analyzer().analyze([_clean_policy("projects/clean")])
         assert r.findings_for_resource("projects/clean") == []
+
+
+def _gcp_iam_export_payload() -> dict:
+    return {
+        "policies": [
+            {
+                "project_id": "prod-project",
+                "policy": {
+                    "bindings": [
+                        {
+                            "role": "roles/owner",
+                            "members": [
+                                "user:platform@example.com",
+                                "user:vendor@external.test",
+                                "serviceAccount:123456789-compute@developer.gserviceaccount.com",
+                            ],
+                        },
+                        {"role": "roles/storage.objectViewer", "members": ["allUsers"]},
+                    ]
+                },
+                "service_account_keys": [
+                    {
+                        "key_id": "legacy-key",
+                        "service_account": "deploy@prod-project.iam.gserviceaccount.com",
+                        "created_at_days_ago": 181,
+                    }
+                ],
+            }
+        ]
+    }
+
+
+def test_gcp_iam_loader_accepts_wrapped_policy_exports(tmp_path):
+    export_path = tmp_path / "gcp-iam.json"
+    export_path.write_text(json.dumps(_gcp_iam_export_payload()), encoding="utf-8")
+
+    policies = load_gcp_iam_policies_from_export(export_path)
+
+    assert len(policies) == 1
+    assert policies[0].resource == "projects/prod-project"
+    assert len(policies[0].bindings) == 2
+    assert policies[0].service_account_keys[0]["key_id"] == "legacy-key"
+
+
+def test_scan_gcp_iam_cli_writes_report_and_gates(tmp_path):
+    export_path = tmp_path / "gcp-iam.json"
+    output_dir = tmp_path / "reports"
+    export_path.write_text(json.dumps(_gcp_iam_export_payload()), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--output-dir",
+            str(output_dir),
+            "scan-gcp-iam",
+            "--input",
+            str(export_path),
+            "--org-domain",
+            "example.com",
+            "--fail-on",
+            "critical",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "GCP IAM export: 1 policy snapshot(s), 8 finding(s)" in result.output
+    reports = list(output_dir.glob("posture_gcp_*.md"))
+    assert len(reports) == 1
+    report_text = reports[0].read_text(encoding="utf-8")
+    assert "Public member 'allUsers' granted role 'roles/storage.objectViewer'" in report_text
+    assert "Service account key 'legacy-key' is 181 days old" in report_text

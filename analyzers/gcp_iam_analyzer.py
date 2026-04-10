@@ -36,9 +36,11 @@ Usage::
 """
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
@@ -679,3 +681,76 @@ class GCPIAMAnalyzer:
                     ),
                 ))
         return findings
+
+
+def _resource_from_export_record(record: Dict[str, Any], index: int) -> str:
+    """Return a stable GCP resource identifier from a policy export record."""
+    resource = (
+        record.get("resource")
+        or record.get("resource_name")
+        or record.get("name")
+        or record.get("fullResourceName")
+    )
+    if resource:
+        return str(resource)
+
+    project_id = record.get("project_id") or record.get("projectId") or record.get("project")
+    if project_id:
+        project_text = str(project_id)
+        return project_text if project_text.startswith("projects/") else f"projects/{project_text}"
+
+    return f"gcp-iam-policy-{index}"
+
+
+def _policy_document_from_export_record(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize direct and wrapped GCP IAM policy export shapes."""
+    policy = record.get("policy") if isinstance(record.get("policy"), dict) else record
+    policy_dict = dict(policy)
+    if "service_account_keys" in record and "service_account_keys" not in policy_dict:
+        policy_dict["service_account_keys"] = record["service_account_keys"]
+    if "serviceAccountKeys" in record and "service_account_keys" not in policy_dict:
+        policy_dict["service_account_keys"] = record["serviceAccountKeys"]
+    return policy_dict
+
+
+def load_gcp_iam_policies_from_export(path: str | Path) -> List[IAMPolicy]:
+    """
+    Load one or more GCP IAM policy snapshots from an offline JSON export.
+
+    Accepted shapes:
+    - a direct IAM policy object with ``bindings``
+    - a list of policy records
+    - ``{"policies": [...]}``, ``{"resources": [...]}``, or ``{"projects": [...]}``
+
+    Wrapped records may provide ``resource``/``project_id`` alongside a nested
+    ``policy`` object and optional ``service_account_keys`` metadata.
+    """
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+
+    if isinstance(raw, list):
+        records = raw
+    elif isinstance(raw, dict) and isinstance(raw.get("policies"), list):
+        records = raw["policies"]
+    elif isinstance(raw, dict) and isinstance(raw.get("resources"), list):
+        records = raw["resources"]
+    elif isinstance(raw, dict) and isinstance(raw.get("projects"), list):
+        records = raw["projects"]
+    elif isinstance(raw, dict) and ("bindings" in raw or "policy" in raw):
+        records = [raw]
+    else:
+        raise ValueError(
+            "GCP IAM export must be a JSON object, list, or object containing "
+            '"policies", "resources", or "projects".'
+        )
+
+    policies: List[IAMPolicy] = []
+    for index, record in enumerate(records, start=1):
+        if not isinstance(record, dict):
+            raise ValueError("Each GCP IAM export record must be a JSON object.")
+        policies.append(
+            IAMPolicy.from_dict(
+                resource=_resource_from_export_record(record, index),
+                policy_dict=_policy_document_from_export_record(record),
+            )
+        )
+    return policies

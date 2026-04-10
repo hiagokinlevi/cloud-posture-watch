@@ -483,6 +483,112 @@ def scan_aws_iam(
             sys.exit(1)
 
 
+@cli.command("scan-gcp-iam")
+@click.option(
+    "--input",
+    "input_file",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to an offline GCP IAM policy JSON export.",
+)
+@click.option(
+    "--org-domain",
+    "org_domains",
+    multiple=True,
+    help="Trusted organization email domain for external-member checks. Repeatable.",
+)
+@click.option(
+    "--max-service-account-key-age-days",
+    default=90,
+    show_default=True,
+    type=int,
+    help="Maximum acceptable age for exported GCP service account keys.",
+)
+@click.option(
+    "--skip-external-members",
+    is_flag=True,
+    default=False,
+    help="Disable external user checks when an org-domain allow list is not desired.",
+)
+@click.option(
+    "--fail-on",
+    "fail_on",
+    default=None,
+    type=click.Choice(["low", "medium", "high", "critical"], case_sensitive=False),
+    help="Exit with a non-zero code if any finding reaches this severity.",
+)
+@click.pass_context
+def scan_gcp_iam(
+    ctx: click.Context,
+    input_file: str,
+    org_domains: tuple[str, ...],
+    max_service_account_key_age_days: int,
+    skip_external_members: bool,
+    fail_on: str | None,
+) -> None:
+    """
+    Analyze an offline GCP IAM policy export for broad access and key age risk.
+
+    This command does not require GCP credentials or the Google SDK. It accepts
+    JSON gathered by an authorized read-only operator from project, folder, or
+    organization IAM policy exports, plus optional service account key metadata.
+    """
+    import uuid
+    from analyzers.gcp_iam_analyzer import (
+        GCPIAMAnalyzer,
+        load_gcp_iam_policies_from_export,
+    )
+    from reports.posture_report import save_report
+    from schemas.posture import PostureFinding, PostureReport, Provider, Severity
+
+    policies = load_gcp_iam_policies_from_export(input_file)
+    iam_report = GCPIAMAnalyzer(
+        org_domains=list(org_domains) or None,
+        max_key_age_days=max_service_account_key_age_days,
+        check_external_members=not skip_external_members,
+    ).analyze(policies)
+    schema_findings = [
+        PostureFinding(
+            provider=Provider.GCP,
+            resource_type="iam_policy",
+            resource_name=f.resource,
+            severity=Severity(f.severity.value.lower()),
+            flag=f.check_id,
+            title=f.title,
+            recommendation=f.remediation or f.detail,
+        )
+        for f in iam_report.findings
+    ]
+
+    report = PostureReport(
+        run_id=str(uuid.uuid4())[:8],
+        provider=Provider.GCP,
+        baseline_name="offline-gcp-iam-export",
+        total_resources=len(policies),
+        findings=schema_findings,
+    )
+    report_path = save_report(report, ctx.obj["output_dir"])
+
+    counts = report.finding_counts
+    click.echo(
+        f"GCP IAM export: {len(policies)} policy snapshot(s), "
+        f"{len(iam_report.findings)} finding(s), risk_score={iam_report.risk_score} | "
+        f"CRITICAL={counts['critical']} HIGH={counts['high']} "
+        f"MEDIUM={counts['medium']} LOW={counts['low']}"
+    )
+    click.echo(f"Report written to: {report_path}")
+
+    if fail_on:
+        severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+        threshold = severity_rank.get(fail_on.lower(), 3)
+        if any(severity_rank.get(f.severity.value, 0) >= threshold for f in report.findings):
+            click.echo(
+                f"Fail condition met: findings at or above '{fail_on}' severity detected.",
+                err=True,
+            )
+            sys.exit(1)
+
+
 @cli.command()
 @click.option(
     "--baseline",

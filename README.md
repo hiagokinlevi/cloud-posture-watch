@@ -13,6 +13,7 @@
 - **Logging gap detection** — checks whether audit trails, access logs, and flow logs are enabled
 - **VPC Flow Logs coverage** — flags AWS VPCs with missing flow logs, missing delivery destinations, missing rejected-traffic capture, or coarse aggregation windows
 - **Offline AWS IAM review** — scans exported IAM evidence for root MFA gaps, stale active user keys, and permissive policies
+- **Offline GCP IAM review** — scans exported IAM policies for primitive roles, public principals, external sensitive-role users, default service accounts, and stale service account keys
 - **Offline Azure NSG review** — scans exported `az network nsg list` JSON for public admin, database, and broad inbound rules
 - **Offline GCP firewall review** — scans exported `gcloud compute firewall-rules list` JSON for public admin, database, web, and broad inbound rules
 - **Encryption posture** — validates encryption at rest and in transit across storage and database services
@@ -72,6 +73,9 @@ k1n-posture scan-azure-nsgs --input nsgs.json --fail-on high
 # Offline AWS IAM posture review
 k1n-posture scan-aws-iam --input aws-iam-posture.json --fail-on high
 
+# Offline GCP IAM posture review
+k1n-posture scan-gcp-iam --input gcp-iam-policies.json --org-domain example.com --fail-on high
+
 # Offline GCP firewall exposure review
 gcloud compute firewall-rules list --format=json > firewalls.json
 k1n-posture scan-gcp-firewalls --input firewalls.json --fail-on high
@@ -111,6 +115,7 @@ Each **provider** module collects raw configuration state and returns typed data
 | Azure    | Storage Accounts | HTTPS-only, public blob access, encryption          |
 | Azure    | NSGs             | Offline export review for world-open admin, database, web, and broad inbound rules |
 | GCP      | Cloud Storage    | Uniform bucket-level access, public ACLs            |
+| GCP      | IAM              | Offline export review for primitive roles, public IAM members, external sensitive-role users, and service account key age |
 | GCP      | Firewall Rules   | Offline export review for world-open admin, database, web, and broad inbound rules |
 | GCP      | Cloud Logging    | Audit log configuration                             |
 
@@ -155,6 +160,8 @@ Requires the built-in **Reader** role on the target subscription.
 ### GCP
 
 Requires the **roles/viewer** IAM role on the target project.
+
+Offline GCP IAM review can use approved JSON evidence instead of live credentials. Use IAM policy exports with `bindings` records and include optional `service_account_keys` metadata with `service_account`, `key_id`, and `created_at_days_ago` when key-age review is needed.
 
 Live firewall collection uses read-only Compute API access such as `compute.firewalls.list`; offline review only needs a JSON export from an account allowed to list firewall rules.
 
