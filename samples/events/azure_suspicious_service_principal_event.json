@@ -1,0 +1,9 @@
+{
+  "provider": "azure",
+  "resource_type": "service_principal",
+  "resource_name": "ci-prod-sp",
+  "flag": "SERVICE_PRINCIPAL_OWNER",
+  "severity": "high",
+  "title": "Service principal has privileged Owner access",
+  "recommendation": "Review scope, preserve Entra audit evidence, and prepare least-privilege role reduction."
+}

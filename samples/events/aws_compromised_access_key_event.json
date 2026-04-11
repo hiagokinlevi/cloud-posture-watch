@@ -1,0 +1,9 @@
+{
+  "provider": "aws",
+  "resource_type": "iam_user",
+  "resource_name": "prod-deploy-bot",
+  "flag": "STALE_ACTIVE_KEY",
+  "severity": "critical",
+  "title": "Active access key is stale and linked to suspicious activity",
+  "recommendation": "Preserve CloudTrail evidence, review recent API calls, and prepare controlled credential rotation."
+}

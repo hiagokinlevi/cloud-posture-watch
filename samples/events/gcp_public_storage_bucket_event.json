@@ -1,0 +1,9 @@
+{
+  "provider": "gcp",
+  "resource_type": "gcs_bucket",
+  "resource_name": "customer-data-exports",
+  "flag": "PUBLIC_MEMBER",
+  "severity": "high",
+  "title": "Cloud Storage bucket allows public member access",
+  "recommendation": "Capture IAM policy evidence, review access logs, and prepare public principal removal."
+}
