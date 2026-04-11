@@ -8,6 +8,7 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 
 SUPPORTED_COMMANDS = {
@@ -156,7 +157,10 @@ def write_github_outputs(outputs: dict[str, str]) -> None:
         return
     with Path(output_path).open("a", encoding="utf-8") as handle:
         for key, value in outputs.items():
-            handle.write(f"{key}={value}\n")
+            delimiter = f"CPW_OUTPUT_{uuid4().hex}"
+            while delimiter in value:
+                delimiter = f"CPW_OUTPUT_{uuid4().hex}"
+            handle.write(f"{key}<<{delimiter}\n{value}\n{delimiter}\n")
 
 
 def main(argv: list[str] | None = None) -> int:

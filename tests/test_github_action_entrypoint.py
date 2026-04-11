@@ -11,6 +11,7 @@ from scripts.github_action_entrypoint import (
     resolve_output_directory,
     resolve_working_directory,
     validate_command,
+    write_github_outputs,
 )
 
 
@@ -135,3 +136,17 @@ def test_discover_report_outputs_returns_newest_report_per_extension(tmp_path: P
     assert outputs["report_markdown"] == str(markdown_new.resolve())
     assert outputs["report_json"] == str(json_report.resolve())
     assert outputs["report_html"] == ""
+
+
+def test_write_github_outputs_uses_multiline_format_for_newline_values(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    output_file = tmp_path / "github_output.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_file))
+
+    write_github_outputs({"report_markdown": "safe\ninjected=value"})
+
+    contents = output_file.read_text(encoding="utf-8")
+    assert contents.startswith("report_markdown<<CPW_OUTPUT_")
+    assert "safe\ninjected=value\nCPW_OUTPUT_" in contents
+    assert "report_markdown=safe" not in contents
