@@ -90,6 +90,7 @@ def test_build_command_places_scan_output_dir_after_subcommand(tmp_path: Path) -
 def test_resolve_paths_use_workspace_and_workdir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
+    (workspace / "repo").mkdir()
     monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
 
     workdir = resolve_working_directory("repo")
@@ -108,6 +109,30 @@ def test_resolve_working_directory_rejects_parent_traversal(
 
     with pytest.raises(ValueError, match="Working directory must stay within the GitHub workspace"):
         resolve_working_directory("../outside")
+
+
+def test_resolve_working_directory_rejects_missing_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+
+    with pytest.raises(ValueError, match="Working directory does not exist"):
+        resolve_working_directory("missing-repo")
+
+
+def test_resolve_working_directory_rejects_file_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    file_path = workspace / "not-a-dir"
+    file_path.write_text("x", encoding="utf-8")
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+
+    with pytest.raises(ValueError, match="Working directory is not a directory"):
+        resolve_working_directory("not-a-dir")
 
 
 def test_resolve_output_directory_rejects_absolute_escape(

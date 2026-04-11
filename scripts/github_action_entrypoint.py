@@ -97,7 +97,14 @@ def resolve_working_directory(raw_workdir: str) -> Path:
     path = Path(raw_workdir)
     if not path.is_absolute():
         path = workspace / path
-    return _ensure_within_workspace(path.resolve(), label="Working directory", workspace=workspace)
+    resolved = _ensure_within_workspace(
+        path.resolve(), label="Working directory", workspace=workspace
+    )
+    if not resolved.exists():
+        raise ValueError(f"Working directory does not exist: {resolved}")
+    if not resolved.is_dir():
+        raise ValueError(f"Working directory is not a directory: {resolved}")
+    return resolved
 
 
 def resolve_output_directory(raw_output_dir: str, workdir: Path) -> Path:
