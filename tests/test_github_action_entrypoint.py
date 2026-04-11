@@ -122,7 +122,11 @@ def test_resolve_output_directory_rejects_absolute_escape(
         resolve_output_directory(str(tmp_path / "outside"), workdir)
 
 
-def test_discover_report_outputs_returns_newest_report_per_extension(tmp_path: Path) -> None:
+def test_discover_report_outputs_returns_newest_report_per_extension(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+
     markdown_old = tmp_path / "posture_aws_20260410_010101.md"
     markdown_new = tmp_path / "posture_aws_20260410_020202.md"
     json_report = tmp_path / "posture_aws_20260410_020202.json"
@@ -136,6 +140,28 @@ def test_discover_report_outputs_returns_newest_report_per_extension(tmp_path: P
     assert outputs["report_markdown"] == str(markdown_new.resolve())
     assert outputs["report_json"] == str(json_report.resolve())
     assert outputs["report_html"] == ""
+
+
+def test_discover_report_outputs_ignores_symlink_escape(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    output_dir = workspace / "output"
+    workspace.mkdir()
+    output_dir.mkdir()
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+
+    markdown_report = output_dir / "posture_aws_20260410_010101.md"
+    markdown_report.write_text("safe", encoding="utf-8")
+
+    outside_report = tmp_path / "outside.md"
+    outside_report.write_text("secret", encoding="utf-8")
+    escaped_report = output_dir / "posture_aws_20260410_020202.md"
+    escaped_report.symlink_to(outside_report)
+
+    outputs = discover_report_outputs(output_dir)
+
+    assert outputs["report_markdown"] == str(markdown_report.resolve())
 
 
 def test_write_github_outputs_uses_multiline_format_for_newline_values(

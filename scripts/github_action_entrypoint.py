@@ -143,8 +143,22 @@ def build_command(
 def discover_report_outputs(output_dir: Path) -> dict[str, str]:
     """Return the newest posture report path for each known report extension."""
     results = {key: "" for key in REPORT_PATTERNS}
+    workspace = _resolve_workspace_root()
     for key, pattern in REPORT_PATTERNS.items():
-        candidates = sorted(output_dir.glob(pattern), key=lambda item: item.stat().st_mtime)
+        candidates = []
+        for item in output_dir.glob(pattern):
+            if item.is_symlink() or not item.is_file():
+                continue
+            try:
+                _ensure_within_workspace(
+                    item.resolve(),
+                    label="Discovered report",
+                    workspace=workspace,
+                )
+            except ValueError:
+                continue
+            candidates.append(item)
+        candidates.sort(key=lambda item: item.stat().st_mtime)
         if candidates:
             results[key] = str(candidates[-1].resolve())
     return results
