@@ -55,6 +55,7 @@ This document outlines the planned development direction for `cloud-posture-watc
 
 ## Future / Under consideration
 
+- [x] Cloud SOAR routing layer with provider playbooks, approval policy, and sample events
 - SARIF output format for GitHub Code Scanning integration
 - CIS Benchmark mapping for each finding
 - Terraform state drift comparison (supplement live API checks)

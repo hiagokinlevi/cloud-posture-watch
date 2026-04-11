@@ -28,6 +28,8 @@ For notification workflows, `k1n-posture notify-webhook --input posture.json --t
 
 For scheduled monitoring workflows, `k1n-posture watch-report --input posture.json --state-file .watch/aws.json --alert-on high --target slack|teams` compares the latest posture report to the previous snapshot, highlights newly introduced versus resolved findings, and emits an alert only when the new findings meet the configured severity threshold.
 
+For cloud response workflows, `k1n-posture resolve-soar --input samples/events/aws_public_bucket_event.json --format json` maps a normalized finding into a defensive SOAR route. The response includes the matched playbook, severity override, approval mode, evidence-preserving preparation actions, and the execution policy defined under `soar/configs/default_approval.yaml`.
+
 For GitHub-native automation, the repository ships a composite action in `action.yml`. The action installs `cloud-posture-watch`, validates the requested `k1n-posture` subcommand and arguments, runs inside the workflow workspace, and publishes the newest report paths as outputs for follow-on artifact upload or notification steps.
 
 ## What this tool does
@@ -39,6 +41,7 @@ For GitHub-native automation, the repository ships a composite action in `action
 5. **Watches** scheduled JSON posture artifacts for newly introduced findings.
 6. **Notifies** Slack or Teams channels from approved JSON posture artifacts when an operator supplies an HTTPS incoming webhook.
 7. **Automates** repeatable GitHub Actions runs through the bundled composite action.
+8. **Routes** normalized cloud findings into SOAR playbooks for AWS, Azure, and GCP without executing unsafe changes.
 
 ## What this tool does not do
 
@@ -62,4 +65,6 @@ For GitHub-native automation, the repository ships a composite action in `action
 
 - [Cloud security model](cloud-security-model.md) — the conceptual framework behind the checks
 - [Posture methodology](posture-methodology.md) — how findings are derived and scored
+- [Cloud SOAR layer](cloud-soar.md) — how findings map to playbooks, approvals, and preparation actions
 - [First AWS assessment tutorial](../training/tutorials/first-aws-assessment.md)
+- [First cloud SOAR runbook tutorial](../training/tutorials/first-cloud-soar-runbook.md)

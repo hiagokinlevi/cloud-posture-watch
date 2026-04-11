@@ -10,10 +10,18 @@ This tutorial introduces the SOAR layer inside `cloud-posture-watch`.
 
 ## Suggested Exercise
 
-1. start with a synthetic AWS or Azure finding
-2. route it through the SOAR rules
-3. review the selected playbook
-4. confirm which actions are preparation-only and which require approval
+1. Start with a synthetic event from `samples/events/`.
+2. Run `k1n-posture resolve-soar --input <event.json> --format json`.
+3. Review the selected playbook under `soar/playbooks/`.
+4. Compare the chosen actions to `soar/configs/default_approval.yaml`.
+5. Confirm which actions are preparation-only and which require approval.
+
+## Recommended Practice Inputs
+
+- `samples/events/aws_compromised_access_key_event.json`
+- `samples/events/aws_public_bucket_event.json`
+- `samples/events/azure_suspicious_service_principal_event.json`
+- `samples/events/gcp_public_storage_bucket_event.json`
 
 ## Why This Matters
 

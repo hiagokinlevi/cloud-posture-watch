@@ -30,6 +30,7 @@
 - **Watch mode for scheduled runs** — compares the latest JSON report to the prior snapshot and alerts only on newly introduced findings
 - **GitHub Action support** — composite Marketplace-ready action validates CLI inputs, installs the tool, and exposes generated report paths as workflow outputs
 - **Slack and Teams webhooks** — sends posture-report summaries to incoming webhooks or prints dry-run payloads for approval
+- **Cloud SOAR routing** — maps normalized AWS, Azure, and GCP findings into defensive response playbooks, approval modes, and preparation actions
 - **Extensible baselines** — minimal / standard / strict profiles, all customizable
 
 ---
@@ -143,6 +144,11 @@ k1n-posture watch-report \
   --alert-on high \
   --target slack \
   --dry-run
+
+# Route a normalized cloud event into a SOAR playbook
+k1n-posture resolve-soar \
+  --input ./samples/events/aws_public_bucket_event.json \
+  --format json
 ```
 
 ---
@@ -157,6 +163,7 @@ cloud-posture-watch/
 │   └── gcp/
 ├── analyzers/          # Cross-cloud analysis logic (exposure, logging, drift)
 ├── baselines/          # YAML baseline profiles per provider
+├── soar/               # Cloud SOAR rules, approval policy, and playbooks
 ├── schemas/            # Pydantic models for all data structures
 ├── reports/            # Report generation
 ├── cli/                # Click CLI entry point
@@ -164,6 +171,8 @@ cloud-posture-watch/
 ```
 
 Each **provider** module collects raw configuration state and returns typed dataclasses. The **analyzers** consume provider output and apply policy logic. The **reports** module serialises findings into human-readable output.
+
+The **SOAR** layer consumes normalized findings after posture analysis or offline evidence review. It maps event flags such as `PUBLIC_BUCKET`, `SERVICE_PRINCIPAL_OWNER`, or `STALE_ACTIVE_KEY` to provider-specific response playbooks, severity-aware approval expectations, and safe preparation steps that preserve evidence before any live change.
 
 ---
 
