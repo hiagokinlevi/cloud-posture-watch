@@ -1217,6 +1217,54 @@ def json_schema() -> None:
     click.echo(json.dumps(POSTURE_REPORT_JSON_SCHEMA, indent=2))
 
 
+@cli.command("resolve-soar")
+@click.option(
+    "--input",
+    "input_file",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Path to a normalized JSON event to route into a cloud SOAR playbook.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    default="text",
+    type=click.Choice(["text", "json"], case_sensitive=False),
+    show_default=True,
+    help="Output format for the resolved SOAR route.",
+)
+def resolve_soar(input_file: str, output_format: str) -> None:
+    """
+    Resolve a normalized cloud event into a defensive SOAR route.
+
+    The input JSON should contain, at minimum, provider, resource_type,
+    resource_name, and flag. The command returns the matched playbook,
+    severity, approval mode, and safe preparation actions.
+    """
+    from soar.router import resolve_soar_route
+
+    event = json.loads(Path(input_file).read_text(encoding="utf-8"))
+    route = resolve_soar_route(event)
+
+    if output_format.lower() == "json":
+        click.echo(json.dumps(route.to_dict(), indent=2))
+        return
+
+    click.echo(f"Provider:           {route.provider.upper()}")
+    click.echo(f"Resource type:      {route.resource_type}")
+    click.echo(f"Resource name:      {route.resource_name}")
+    click.echo(f"Flag:               {route.flag}")
+    click.echo(f"Matched rule:       {route.rule_id}")
+    click.echo(f"Route matched:      {'yes' if route.matched else 'fallback'}")
+    click.echo(f"Severity:           {route.severity}")
+    click.echo(f"Approval mode:      {route.approval_mode}")
+    click.echo(f"Approval required:  {'yes' if route.approval_required else 'no'}")
+    click.echo(f"Playbook:           {route.playbook}")
+    click.echo("Actions:")
+    for action in route.actions:
+        click.echo(f"  - {action}")
+
+
 @cli.command("notify-webhook")
 @click.option(
     "--input",
