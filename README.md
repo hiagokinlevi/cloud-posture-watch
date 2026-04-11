@@ -12,6 +12,7 @@
 - **Exposure analysis** — identifies publicly accessible storage, compute, and network resources
 - **Logging gap detection** — checks whether audit trails, access logs, and flow logs are enabled
 - **VPC Flow Logs coverage** — flags AWS VPCs with missing flow logs, missing delivery destinations, missing rejected-traffic capture, or coarse aggregation windows
+- **Offline AWS CloudTrail review** — scans exported trail configs for disabled logging, missing validation, missing global events, absent CloudWatch forwarding, and management-event gaps
 - **Offline AWS IAM review** — scans exported IAM evidence for root MFA gaps, stale active user keys, and permissive policies
 - **Offline AWS RDS review** — scans exported RDS instance and cluster evidence for missing storage encryption and public database exposure
 - **Offline AWS secrets correlation** — compares Secrets Manager or Parameter Store inventory against approved hardcoded credential findings to spot unmanaged literals and plaintext credential parameters
@@ -83,6 +84,12 @@ k1n-posture scan-azure-nsgs --input nsgs.json --fail-on high
 
 # Offline AWS IAM posture review
 k1n-posture scan-aws-iam --input aws-iam-posture.json --fail-on high
+
+# Offline AWS CloudTrail logging-hardening review
+aws cloudtrail describe-trails --include-shadow-trails false --output json > cloudtrail-trails.json
+# Optionally merge get-trail-status evidence keyed by trail name into:
+# {"trailList": [...], "status_map": {"org-trail": {"IsLogging": true}}}
+k1n-posture scan-aws-cloudtrail --input cloudtrail-trails.json --fail-on high
 
 # Offline AWS RDS encryption and public exposure review
 aws rds describe-db-instances --output json > aws-rds-instances.json
@@ -181,7 +188,7 @@ The **SOAR** layer consumes normalized findings after posture analysis or offlin
 | Provider | Service          | Checks                                              |
 |----------|------------------|-----------------------------------------------------|
 | AWS      | S3               | Public access block, encryption, logging, versioning |
-| AWS      | CloudTrail       | Enabled, multi-region, log validation               |
+| AWS      | CloudTrail       | Enabled, multi-region, global events, log validation, CloudWatch forwarding, management events |
 | AWS      | Security Groups  | World-open SSH/RDP, public admin/database exposure  |
 | AWS      | VPC Flow Logs    | Missing telemetry, delivery destination gaps, reject-traffic gaps, coarse aggregation |
 | AWS      | IAM              | Offline export review for root MFA, stale active user access keys, and permissive policies |
@@ -216,6 +223,7 @@ All collectors use **read-only** permissions. No write operations are performed.
     "s3:GetBucketVersioning",
     "s3:GetBucketPublicAccessBlock",
     "cloudtrail:DescribeTrails",
+    "cloudtrail:GetTrailStatus",
     "ec2:DescribeSecurityGroups",
     "ec2:DescribeFlowLogs",
     "ec2:DescribeVpcs",
@@ -228,6 +236,8 @@ All collectors use **read-only** permissions. No write operations are performed.
   "Resource": "*"
 }
 ```
+
+Offline AWS CloudTrail review can use an approved JSON export from `aws cloudtrail describe-trails --include-shadow-trails false --output json` instead of live credentials. Add optional per-trail `status_map` evidence keyed by trail name when `get-trail-status` output is available so the scanner can flag disabled logging alongside validation, global-event, KMS, CloudWatch, and management-event gaps.
 
 Offline AWS IAM review can use an approved JSON evidence bundle instead of live credentials. Include `account_summary.SummaryMap.AccountMFAEnabled`, credential-report user rows with `access_key_*_active` and `access_key_*_age_days`, and policy documents under `policies[].document`.
 

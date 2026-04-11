@@ -59,8 +59,10 @@ Usage::
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any, Optional
 
 
@@ -522,6 +524,33 @@ class CloudTrailAnalyzer:
 
 
 # ---------------------------------------------------------------------------
+# Export loading helpers
+# ---------------------------------------------------------------------------
+
+def load_cloudtrail_export(path: str | Path) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Load CloudTrail trail config and optional status evidence from a JSON file."""
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    return load_cloudtrail_export_dict(payload)
+
+
+def load_cloudtrail_export_dict(
+    payload: Any,
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """
+    Normalize common CloudTrail export shapes.
+
+    Supported trail containers include raw `trailList` output, top-level
+    `trails` or `Trails` arrays, wrapped exports under keys like `results`,
+    and single-trail dicts. Optional status data can be supplied as a
+    `status_map` / `statusMap` dict keyed by trail name, or as a
+    `trail_statuses` list containing per-trail status dicts.
+    """
+    trails = _extract_trails(payload)
+    status_map = _extract_status_map(payload)
+    return trails, status_map
+
+
+# ---------------------------------------------------------------------------
 # Internal helper
 # ---------------------------------------------------------------------------
 
@@ -530,3 +559,134 @@ def _get(d: dict[str, Any], *keys: str, default: Any = None) -> Any:
         if key in d:
             return d[key]
     return default
+
+
+_TRAIL_CONTAINER_KEYS = (
+    "trailList",
+    "trail_list",
+    "trails",
+    "Trails",
+)
+_STATUS_MAP_KEYS = (
+    "status_map",
+    "statusMap",
+    "trail_status",
+    "trailStatus",
+    "statuses",
+)
+_STATUS_LIST_KEYS = (
+    "trail_statuses",
+    "trailStatuses",
+    "status_list",
+    "statusList",
+)
+_WRAPPER_KEYS = (
+    "results",
+    "result",
+    "payload",
+    "data",
+    "describe_trails",
+    "describeTrails",
+)
+
+
+def _looks_like_trail_config(data: Any) -> bool:
+    if not isinstance(data, dict):
+        return False
+    return any(
+        key in data
+        for key in (
+            "Name",
+            "name",
+            "TrailARN",
+            "trail_arn",
+            "IsMultiRegionTrail",
+            "is_multi_region_trail",
+        )
+    )
+
+
+def _extract_trails(payload: Any) -> list[dict[str, Any]]:
+    if isinstance(payload, list):
+        if all(isinstance(item, dict) for item in payload) and any(
+            _looks_like_trail_config(item) for item in payload
+        ):
+            return [item for item in payload if isinstance(item, dict)]
+        for item in payload:
+            trails = _extract_trails(item)
+            if trails:
+                return trails
+        return []
+
+    if not isinstance(payload, dict):
+        return []
+
+    for key in _TRAIL_CONTAINER_KEYS:
+        candidate = payload.get(key)
+        if isinstance(candidate, list):
+            return [item for item in candidate if isinstance(item, dict)]
+
+    for key in _WRAPPER_KEYS:
+        candidate = payload.get(key)
+        if candidate is None:
+            continue
+        trails = _extract_trails(candidate)
+        if trails:
+            return trails
+
+    if _looks_like_trail_config(payload):
+        return [payload]
+
+    return []
+
+
+def _extract_status_map(payload: Any) -> dict[str, dict[str, Any]]:
+    if isinstance(payload, list):
+        for item in payload:
+            status_map = _extract_status_map(item)
+            if status_map:
+                return status_map
+        return {}
+
+    if not isinstance(payload, dict):
+        return {}
+
+    for key in _STATUS_MAP_KEYS:
+        candidate = payload.get(key)
+        if isinstance(candidate, dict):
+            normalized = {
+                str(name): status
+                for name, status in candidate.items()
+                if isinstance(status, dict)
+            }
+            if normalized:
+                return normalized
+
+    for key in _STATUS_LIST_KEYS:
+        candidate = payload.get(key)
+        if isinstance(candidate, list):
+            normalized = _status_list_to_map(candidate)
+            if normalized:
+                return normalized
+
+    for key in _WRAPPER_KEYS:
+        candidate = payload.get(key)
+        if candidate is None:
+            continue
+        status_map = _extract_status_map(candidate)
+        if status_map:
+            return status_map
+
+    return {}
+
+
+def _status_list_to_map(items: list[Any]) -> dict[str, dict[str, Any]]:
+    status_map: dict[str, dict[str, Any]] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        name = _get(item, "Name", "name", "TrailName", "trail_name", default="")
+        if not name:
+            continue
+        status_map[str(name)] = item
+    return status_map

@@ -3,10 +3,12 @@ Tests for analyzers/cloudtrail_analyzer.py
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -17,7 +19,10 @@ from analyzers.cloudtrail_analyzer import (
     TrailPosture,
     TrailSeverity,
     _get,
+    load_cloudtrail_export,
+    load_cloudtrail_export_dict,
 )
+from cli.main import cli
 
 
 # ===========================================================================
@@ -81,6 +86,47 @@ class TestGet:
 
     def test_zero_value_returned(self):
         assert _get({"a": 0}, "a", default=99) == 0
+
+
+# ===========================================================================
+# Export loaders
+# ===========================================================================
+
+class TestCloudTrailExportLoaders:
+    def test_load_cloudtrail_export_dict_accepts_wrapped_trails_and_status_map(self):
+        bad_trail = _worst_trail("bad-trail")
+        bad_trail.pop("IsLogging")
+        payload = {
+            "results": {
+                "trailList": [_perfect_trail("good-trail"), bad_trail],
+            },
+            "status_map": {
+                "bad-trail": {"IsLogging": False},
+            },
+        }
+
+        trails, status_map = load_cloudtrail_export_dict(payload)
+
+        assert len(trails) == 2
+        assert trails[0]["Name"] == "good-trail"
+        assert status_map["bad-trail"]["IsLogging"] is False
+
+    def test_load_cloudtrail_export_accepts_status_list(self, tmp_path):
+        export_path = tmp_path / "cloudtrail.json"
+        export_path.write_text(
+            json.dumps(
+                {
+                    "trailList": [_perfect_trail("ops-trail")],
+                    "trail_statuses": [{"Name": "ops-trail", "IsLogging": False}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        trails, status_map = load_cloudtrail_export(export_path)
+
+        assert len(trails) == 1
+        assert status_map["ops-trail"]["IsLogging"] is False
 
 
 # ===========================================================================
@@ -629,3 +675,41 @@ class TestFindingPropagation:
         posture = analyzer.analyze_trail_config(trail, _perfect_status())
         f = next(f for f in posture.findings if f.check_id == "CT-002")
         assert "named-trail" in f.trail_arn
+
+
+def test_scan_aws_cloudtrail_cli_writes_report_and_gates(tmp_path):
+    bad_trail = _worst_trail("bad-trail")
+    bad_trail.pop("IsLogging")
+    export_path = tmp_path / "cloudtrail.json"
+    output_dir = tmp_path / "reports"
+    export_path.write_text(
+        json.dumps(
+            {
+                "trailList": [_perfect_trail("good-trail"), bad_trail],
+                "status_map": {"bad-trail": {"IsLogging": False}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--output-dir",
+            str(output_dir),
+            "scan-aws-cloudtrail",
+            "--input",
+            str(export_path),
+            "--fail-on",
+            "critical",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "AWS CloudTrail export: 2 trail(s), 1 disabled, 8 finding(s)" in result.output
+    reports = list(output_dir.glob("posture_aws_*.md"))
+    assert len(reports) == 1
+    report_text = reports[0].read_text(encoding="utf-8")
+    assert "CloudTrail trail is not logging" in report_text
+    assert "Global service events not included" in report_text

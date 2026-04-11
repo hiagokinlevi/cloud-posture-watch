@@ -485,6 +485,91 @@ def scan_aws_iam(
             sys.exit(1)
 
 
+@cli.command("scan-aws-cloudtrail")
+@click.option(
+    "--input",
+    "input_file",
+    required=True,
+    type=click.Path(exists=True),
+    help=(
+        "Path to an offline AWS CloudTrail JSON export. Accepts raw "
+        "`describe-trails` output plus optional `status_map` evidence keyed by trail name."
+    ),
+)
+@click.option(
+    "--fail-on",
+    "fail_on",
+    default=None,
+    type=click.Choice(["low", "medium", "high", "critical"], case_sensitive=False),
+    help="Exit with a non-zero code if any finding reaches this severity.",
+)
+@click.pass_context
+def scan_aws_cloudtrail(
+    ctx: click.Context,
+    input_file: str,
+    fail_on: str | None,
+) -> None:
+    """
+    Analyze offline AWS CloudTrail exports for logging and retention hardening gaps.
+
+    This command does not require AWS credentials or boto3. It accepts approved
+    JSON exported from `aws cloudtrail describe-trails --include-shadow-trails false`
+    and can optionally combine per-trail status evidence from `get-trail-status`.
+    """
+    import uuid
+    from analyzers.cloudtrail_analyzer import (
+        CloudTrailAnalyzer,
+        load_cloudtrail_export,
+    )
+    from reports.posture_report import save_report
+    from schemas.posture import PostureFinding, PostureReport, Provider, Severity
+
+    trails, status_map = load_cloudtrail_export(input_file)
+    analyzer = CloudTrailAnalyzer()
+    cloudtrail_report = analyzer.build_report(analyzer.analyze_trails(trails, status_map))
+    schema_findings = [
+        PostureFinding(
+            provider=Provider.AWS,
+            resource_type="cloudtrail",
+            resource_name=f.trail_name or f.trail_arn or "unknown-trail",
+            severity=Severity(f.severity.value.lower()),
+            flag=f.check_id,
+            title=f.title,
+            recommendation=f.remediation,
+        )
+        for f in cloudtrail_report.all_findings
+    ]
+
+    report = PostureReport(
+        run_id=str(uuid.uuid4())[:8],
+        provider=Provider.AWS,
+        baseline_name="offline-aws-cloudtrail-export",
+        total_resources=len(trails),
+        findings=schema_findings,
+    )
+    report_path = save_report(report, ctx.obj["output_dir"])
+
+    counts = report.finding_counts
+    click.echo(
+        f"AWS CloudTrail export: {len(trails)} trail(s), "
+        f"{cloudtrail_report.trails_disabled} disabled, "
+        f"{len(cloudtrail_report.all_findings)} finding(s) | "
+        f"CRITICAL={counts['critical']} HIGH={counts['high']} "
+        f"MEDIUM={counts['medium']} LOW={counts['low']}"
+    )
+    click.echo(f"Report written to: {report_path}")
+
+    if fail_on:
+        severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+        threshold = severity_rank.get(fail_on.lower(), 3)
+        if any(severity_rank.get(f.severity.value, 0) >= threshold for f in report.findings):
+            click.echo(
+                f"Fail condition met: findings at or above '{fail_on}' severity detected.",
+                err=True,
+            )
+            sys.exit(1)
+
+
 @cli.command("scan-aws-rds")
 @click.option(
     "--input",
