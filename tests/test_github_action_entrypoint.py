@@ -20,6 +20,10 @@ def test_validate_command_rejects_unknown_subcommand() -> None:
         validate_command("rm -rf")
 
 
+def test_validate_command_accepts_posture_report() -> None:
+    assert validate_command("posture-report") == "posture-report"
+
+
 def test_parse_action_args_rejects_root_level_provider_and_output_dir_flags() -> None:
     with pytest.raises(ValueError, match="dedicated action inputs"):
         parse_action_args("--provider aws --fail-on high")
@@ -234,16 +238,19 @@ def test_discover_report_outputs_returns_newest_report_per_extension(
     markdown_old = tmp_path / "posture_aws_20260410_010101.md"
     markdown_new = tmp_path / "posture_aws_20260410_020202.md"
     json_report = tmp_path / "posture_aws_20260410_020202.json"
+    sarif_report = tmp_path / "posture_aws_20260410_020202.sarif"
 
     markdown_old.write_text("old", encoding="utf-8")
     markdown_new.write_text("new", encoding="utf-8")
     json_report.write_text("{}", encoding="utf-8")
+    sarif_report.write_text("{}", encoding="utf-8")
 
     outputs = discover_report_outputs(tmp_path)
 
     assert outputs["report_markdown"] == str(markdown_new.resolve())
     assert outputs["report_json"] == str(json_report.resolve())
     assert outputs["report_html"] == ""
+    assert outputs["report_sarif"] == str(sarif_report.resolve())
 
 
 def test_discover_report_outputs_ignores_symlink_escape(

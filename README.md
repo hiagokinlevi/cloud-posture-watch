@@ -27,6 +27,7 @@
 - **Configuration drift detection** — compares live state against YAML baselines and highlights deviations
 - **Risk scoring** — applies a shared numeric 0-100 severity model across CLI summaries, Markdown, JSON, and HTML reports
 - **Stable JSON contract** — publishes a v1 posture-report schema for downstream dashboards and CI tooling
+- **SARIF exports** — converts saved posture JSON into GitHub Code Scanning compatible findings
 - **Markdown reports** — human-readable output with findings, scores, and remediation recommendations
 - **Watch mode for scheduled runs** — compares the latest JSON report to the prior snapshot and alerts only on newly introduced findings
 - **GitHub Action support** — composite Marketplace-ready action validates CLI inputs, installs the tool, and exposes generated report paths as workflow outputs
@@ -75,8 +76,9 @@ k1n-posture assess --provider gcp --profile strict
 # Check for drift against a baseline
 k1n-posture drift --provider aws --baseline baselines/aws/standard.yaml
 
-# Generate a report from saved state
-k1n-posture report --input ./output/last_run.json --format markdown
+# Convert a saved JSON report into HTML or SARIF for CI systems
+k1n-posture posture-report --input ./output/last_run.json --format html --output-dir ./output
+k1n-posture posture-report --input ./output/last_run.json --format sarif --output-dir ./output
 
 # Offline Azure NSG exposure review
 az network nsg list -o json > nsgs.json
@@ -283,6 +285,7 @@ Reports are written to `./output/` (configurable via `OUTPUT_DIR`). Each run pro
 
 - `posture_<provider>_<timestamp>.md` — Markdown narrative report
 - `posture_<provider>_<timestamp>.json` — Machine-readable findings (for CI integration)
+- `posture_<provider>_<timestamp>.sarif` — GitHub Code Scanning compatible findings export
 
 The shared risk model weights findings as CRITICAL=10, HIGH=5, MEDIUM=2, LOW=1, and INFO=0, then caps the total score at 100. JSON exports include both `risk_score` and `risk_level` so downstream dashboards and CI gates can preserve the same posture interpretation as the human-readable reports.
 
@@ -292,7 +295,9 @@ Webhook notifications use saved JSON posture reports as input. `k1n-posture noti
 
 Watch mode is designed for scheduled runners that already refresh posture JSON artifacts. `k1n-posture watch-report --input latest.json --state-file .watch/aws.json --alert-on high --target slack|teams` compares the latest report to the previous snapshot, summarizes new, resolved, and persistent findings, updates the state file, and only emits an alert when newly introduced findings meet the configured severity threshold. By default the first run seeds state without alerting to avoid noisy bootstrap notifications; add `--alert-on-first-run` when an initial alert is desired.
 
-The repository now includes a composite GitHub Action in [`action.yml`](action.yml). It installs `cloud-posture-watch`, validates the requested `k1n-posture` subcommand without invoking a shell, runs inside the workflow workspace, and publishes the newest Markdown, JSON, and HTML report paths as step outputs for downstream upload or notification steps.
+The repository now includes a composite GitHub Action in [`action.yml`](action.yml). It installs `cloud-posture-watch`, validates the requested `k1n-posture` subcommand without invoking a shell, runs inside the workflow workspace, and publishes the newest Markdown, JSON, HTML, and SARIF report paths as step outputs for downstream upload or notification steps.
+
+To publish SARIF into GitHub Code Scanning, run a JSON-producing command first and then convert that JSON artifact into SARIF with `posture-report`.
 
 ---
 
@@ -335,6 +340,24 @@ jobs:
           path: ${{ steps.posture.outputs.report-markdown }}
 ```
 
+When your workflow already has a JSON posture artifact from a prior JSON-producing step, append the following steps to convert it into SARIF and upload it to GitHub Code Scanning:
+
+```yaml
+      - name: Convert posture JSON to SARIF
+        id: posture-sarif
+        uses: hiagokinlevi/cloud-posture-watch@main
+        with:
+          command: posture-report
+          args: --input ${{ steps.posture-json.outputs.report-json }} --format sarif
+          output-dir: ./output
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: ${{ steps.posture-sarif.outputs.report-sarif != '' }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ steps.posture-sarif.outputs.report-sarif }}
+```
+
 Use `command: watch-report` with `args: --input ./output/posture_aws_latest.json --state-file .watch/aws-watch-state.json --alert-on high --target slack --webhook-url ${{ secrets.POSTURE_SLACK_WEBHOOK }}` when you want scheduled delta alerts instead of a fresh live assessment. Keep `--provider` and `--output-dir` in the dedicated action inputs so the action can validate and publish the resolved paths consistently.
 
 ---
@@ -349,4 +372,4 @@ See [SECURITY.md](SECURITY.md) for the responsible disclosure policy.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+CC BY 4.0 — see [LICENSE](LICENSE).

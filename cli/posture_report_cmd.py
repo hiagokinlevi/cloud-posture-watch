@@ -2,7 +2,7 @@
 posture-report CLI Command
 ===========================
 A `posture-report` sub-command for the k1n-posture CLI that generates
-JSON and/or HTML reports from a PostureReport object built from
+JSON, HTML, and/or SARIF reports from a PostureReport object built from
 local findings data (no live cloud API calls required).
 
 This command is designed for two use cases:
@@ -15,7 +15,7 @@ The command is registered in cli/main.py as `posture-report`.
 Usage:
     k1n-posture posture-report --input findings.json --format html
     k1n-posture posture-report --input findings.json --format json
-    k1n-posture posture-report --input findings.json --format both
+    k1n-posture posture-report --input findings.json --format all
 
 Input JSON schema (produced by posture_report_json.py or the assess command):
   {
@@ -40,6 +40,7 @@ import click
 
 from reports.posture_report_html import generate_html_report, save_html_report
 from reports.posture_report_json import generate_json_report, save_json_report
+from reports.posture_report_sarif import generate_sarif_report, save_sarif_report
 from schemas.posture import (
     DriftItem,
     Importance,
@@ -143,7 +144,7 @@ def _load_report_from_json(path: Path) -> PostureReport:
     "--format",
     "output_format",
     default="both",
-    type=click.Choice(["json", "html", "both"], case_sensitive=False),
+    type=click.Choice(["json", "html", "sarif", "both", "all"], case_sensitive=False),
     show_default=True,
     help="Output format(s) to generate.",
 )
@@ -168,7 +169,9 @@ def _load_report_from_json(path: Path) -> PostureReport:
     type=click.Choice(["low", "medium", "high", "critical"]),
     help="Exit with code 1 if findings at this severity or above are present.",
 )
+@click.pass_context
 def posture_report_cmd(
+    ctx: click.Context,
     input_file: str,
     output_format: str,
     output_dir: str,
@@ -176,7 +179,7 @@ def posture_report_cmd(
     fail_on: Optional[str],
 ) -> None:
     """
-    Generate a JSON and/or HTML posture report from a saved findings file.
+    Generate a JSON, HTML, and/or SARIF posture report from a saved findings file.
 
     The input file must be a JSON file produced by 'k1n-posture assess'
     or by the posture_report_json.py serializer.
@@ -185,16 +188,25 @@ def posture_report_cmd(
 
     \b
       k1n-posture posture-report --input findings.json --format html
-      k1n-posture posture-report --input findings.json --format both --output-dir ./reports
-      k1n-posture posture-report --input findings.json --stdout --fail-on high
+      k1n-posture posture-report --input findings.json --format sarif --output-dir ./reports
+      k1n-posture posture-report --input findings.json --format all --stdout --fail-on high
     """
     report = _load_report_from_json(Path(input_file))
 
-    output_path = Path(output_dir)
+    resolved_output_dir = output_dir
+    if (
+        output_dir == "./output"
+        and ctx.obj
+        and isinstance(ctx.obj, dict)
+        and ctx.obj.get("output_dir")
+    ):
+        resolved_output_dir = str(ctx.obj["output_dir"])
+
+    output_path = Path(resolved_output_dir)
     written: list[Path] = []
 
     # Generate requested formats
-    if output_format in ("json", "both"):
+    if output_format in ("json", "both", "all"):
         if stdout and output_format == "json":
             click.echo(generate_json_report(report))
         else:
@@ -202,7 +214,7 @@ def posture_report_cmd(
             written.append(p)
             click.echo(f"JSON report: {p}")
 
-    if output_format in ("html", "both"):
+    if output_format in ("html", "both", "all"):
         if stdout and output_format == "html":
             click.echo(generate_html_report(report))
         else:
@@ -210,8 +222,20 @@ def posture_report_cmd(
             written.append(p)
             click.echo(f"HTML report: {p}")
 
+    if output_format in ("sarif", "all"):
+        if stdout and output_format == "sarif":
+            click.echo(generate_sarif_report(report))
+        else:
+            p = save_sarif_report(report, output_path)
+            written.append(p)
+            click.echo(f"SARIF report: {p}")
+
     if output_format == "both" and stdout:
         # Both formats requested with --stdout: print JSON (more useful for piping)
+        click.echo(generate_json_report(report))
+
+    if output_format == "all" and stdout:
+        # Multi-format stdout still prints the JSON representation for piping.
         click.echo(generate_json_report(report))
 
     # Summary line

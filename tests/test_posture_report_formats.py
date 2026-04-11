@@ -1,12 +1,12 @@
 """
-Tests for reports/posture_report_json.py, reports/posture_report_html.py,
-and cli/posture_report_cmd.py.
+Tests for JSON, HTML, and SARIF report serializers plus cli/posture_report_cmd.py.
 
 Validates:
   - JSON report structure, schema_version, field presence
   - HTML report is valid HTML with expected content
+  - SARIF report structure is valid and includes stable rule/result metadata
   - Risk score calculation
-  - save_json_report / save_html_report write to disk correctly
+  - save_json_report / save_html_report / save_sarif_report write to disk correctly
   - posture_report_cmd CLI: parses input JSON, generates output files,
     fail-on gate exits non-zero, missing file raises ClickException
 """
@@ -28,6 +28,11 @@ from reports.posture_report_json import (
     SCHEMA_VERSION,
     generate_json_report,
     save_json_report,
+)
+from reports.posture_report_sarif import (
+    SARIF_VERSION,
+    generate_sarif_report,
+    save_sarif_report,
 )
 from reports.posture_report_schema import (
     JSON_SCHEMA_ID,
@@ -232,6 +237,53 @@ class TestSaveJsonReport:
 
 
 # ---------------------------------------------------------------------------
+# SARIF report
+# ---------------------------------------------------------------------------
+
+class TestGenerateSarifReport:
+
+    def test_returns_valid_sarif_json(self):
+        parsed = json.loads(generate_sarif_report(_report(findings=[_finding()])))
+
+        assert parsed["version"] == SARIF_VERSION
+        assert parsed["runs"][0]["tool"]["driver"]["name"] == "cloud-posture-watch"
+
+    def test_includes_rules_for_findings_and_drift(self):
+        parsed = json.loads(generate_sarif_report(_report(findings=[_finding()], drift=[_drift()])))
+        rules = parsed["runs"][0]["tool"]["driver"]["rules"]
+        rule_ids = {rule["id"] for rule in rules}
+
+        assert "TEST_FLAG" in rule_ids
+        assert "DRIFT-logging_enabled" in rule_ids
+
+    def test_includes_synthetic_locations_and_fingerprints(self):
+        parsed = json.loads(generate_sarif_report(_report(findings=[_finding(resource="prod-bucket")])))
+        result = parsed["runs"][0]["results"][0]
+
+        assert result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"].endswith(
+            "aws/s3_bucket/prod-bucket.json"
+        )
+        assert "primaryLocationLineHash" in result["partialFingerprints"]
+
+
+class TestSaveSarifReport:
+
+    def test_creates_sarif_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = save_sarif_report(_report(findings=[_finding()]), tmpdir)
+
+            assert path.exists()
+            assert path.suffix == ".sarif"
+
+    def test_saved_file_contains_results(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = save_sarif_report(_report(findings=[_finding()]), tmpdir)
+            parsed = json.loads(path.read_text())
+
+            assert parsed["runs"][0]["results"][0]["ruleId"] == "TEST_FLAG"
+
+
+# ---------------------------------------------------------------------------
 # HTML report
 # ---------------------------------------------------------------------------
 
@@ -382,6 +434,38 @@ class TestPostureReportCmd:
             assert "JSON report" in result.output
             assert "HTML report" in result.output
 
+    def test_generates_sarif_output(self):
+        from cli.posture_report_cmd import posture_report_cmd
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            r = _report(findings=[_finding()])
+            input_path = save_json_report(r, ".")
+
+            result = runner.invoke(
+                posture_report_cmd,
+                ["--input", str(input_path), "--format", "sarif", "--output-dir", "./out"],
+            )
+            assert result.exit_code == 0, result.output
+            assert "SARIF report" in result.output
+
+    def test_generates_all_formats(self):
+        from cli.posture_report_cmd import posture_report_cmd
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            r = _report(findings=[_finding()])
+            input_path = save_json_report(r, ".")
+
+            result = runner.invoke(
+                posture_report_cmd,
+                ["--input", str(input_path), "--format", "all", "--output-dir", "./out"],
+            )
+            assert result.exit_code == 0, result.output
+            assert "JSON report" in result.output
+            assert "HTML report" in result.output
+            assert "SARIF report" in result.output
+
     def test_summary_line_in_output(self):
         from cli.posture_report_cmd import posture_report_cmd
 
@@ -480,6 +564,26 @@ class TestPostureReportCmd:
                 parsed = json.loads(json_str[:json_end])
                 assert "provider" in parsed
 
+    def test_stdout_flag_prints_sarif(self):
+        from cli.posture_report_cmd import posture_report_cmd
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            r = _report(findings=[_finding()])
+            input_path = save_json_report(r, ".")
+
+            result = runner.invoke(
+                posture_report_cmd,
+                ["--input", str(input_path), "--format", "sarif", "--stdout"],
+            )
+            assert result.exit_code == 0
+            output = result.output
+            sarif_start = output.find("{")
+            sarif_str = output[sarif_start:].strip()
+            sarif_end = sarif_str.rfind("}") + 1
+            parsed = json.loads(sarif_str[:sarif_end])
+            assert parsed["version"] == SARIF_VERSION
+
     def test_json_schema_command_prints_schema_contract(self):
         from cli.main import cli
 
@@ -489,3 +593,26 @@ class TestPostureReportCmd:
         parsed = json.loads(result.output)
         assert parsed["$id"] == JSON_SCHEMA_ID
         assert parsed["properties"]["schema_version"]["const"] == SCHEMA_VERSION
+
+    def test_root_output_dir_is_used_when_invoked_via_main_cli(self):
+        from cli.main import cli
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            input_path = save_json_report(_report(findings=[_finding()]), ".")
+            result = runner.invoke(
+                cli,
+                [
+                    "--output-dir",
+                    "./root-out",
+                    "posture-report",
+                    "--input",
+                    str(input_path),
+                    "--format",
+                    "sarif",
+                ],
+            )
+
+            assert result.exit_code == 0, result.output
+            assert Path("./root-out").exists()
+            assert any(path.suffix == ".sarif" for path in Path("./root-out").iterdir())

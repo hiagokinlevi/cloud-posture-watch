@@ -49,6 +49,9 @@ outputs:
   report-html:
     description: "Newest HTML report generated in the output directory, if any."
     value: ${{ steps.run.outputs.report_html }}
+  report-sarif:
+    description: "Newest SARIF report generated in the output directory, if any."
+    value: ${{ steps.run.outputs.report_sarif }}
   exit-code:
     description: "CLI exit code returned by the action entrypoint."
     value: ${{ steps.run.outputs.exit_code }}

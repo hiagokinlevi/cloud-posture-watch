@@ -15,6 +15,7 @@ SUPPORTED_COMMANDS = {
     "assess",
     "drift",
     "report",
+    "posture-report",
     "scan",
     "scan-azure-nsgs",
     "scan-gcp-firewalls",
@@ -37,6 +38,7 @@ REPORT_PATTERNS = {
     "report_markdown": "posture_*.md",
     "report_json": "posture_*.json",
     "report_html": "posture_*.html",
+    "report_sarif": "posture_*.sarif",
 }
 PATH_ARG_SPECS = {
     "--baseline": {"must_exist": True},
