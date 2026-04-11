@@ -39,6 +39,20 @@ REPORT_PATTERNS = {
 }
 
 
+def _resolve_workspace_root() -> Path:
+    """Return the resolved GitHub workspace root for path validation."""
+    return Path(os.environ.get("GITHUB_WORKSPACE", os.getcwd())).resolve()
+
+
+def _ensure_within_workspace(path: Path, *, label: str, workspace: Path) -> Path:
+    """Reject action inputs that resolve outside the workflow workspace."""
+    try:
+        path.relative_to(workspace)
+    except ValueError as exc:
+        raise ValueError(f"{label} must stay within the GitHub workspace: {workspace}") from exc
+    return path
+
+
 def parse_action_args(raw_args: str) -> list[str]:
     """Split a GitHub Action input string into CLI tokens."""
     try:
@@ -67,19 +81,20 @@ def validate_command(command: str) -> str:
 
 def resolve_working_directory(raw_workdir: str) -> Path:
     """Resolve the command working directory against the workflow workspace."""
-    workspace = Path(os.environ.get("GITHUB_WORKSPACE", os.getcwd()))
+    workspace = _resolve_workspace_root()
     path = Path(raw_workdir)
     if not path.is_absolute():
         path = workspace / path
-    return path.resolve()
+    return _ensure_within_workspace(path.resolve(), label="Working directory", workspace=workspace)
 
 
 def resolve_output_directory(raw_output_dir: str, workdir: Path) -> Path:
     """Resolve the report output directory relative to the working directory."""
+    workspace = _resolve_workspace_root()
     path = Path(raw_output_dir)
     if not path.is_absolute():
         path = workdir / path
-    return path.resolve()
+    return _ensure_within_workspace(path.resolve(), label="Output directory", workspace=workspace)
 
 
 def build_command(

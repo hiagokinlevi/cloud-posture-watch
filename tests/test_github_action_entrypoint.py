@@ -81,6 +81,29 @@ def test_resolve_paths_use_workspace_and_workdir(monkeypatch: pytest.MonkeyPatch
     assert output_dir == (workspace / "repo" / "artifacts").resolve()
 
 
+def test_resolve_working_directory_rejects_parent_traversal(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+
+    with pytest.raises(ValueError, match="Working directory must stay within the GitHub workspace"):
+        resolve_working_directory("../outside")
+
+
+def test_resolve_output_directory_rejects_absolute_escape(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+    workdir = resolve_working_directory(".")
+
+    with pytest.raises(ValueError, match="Output directory must stay within the GitHub workspace"):
+        resolve_output_directory(str(tmp_path / "outside"), workdir)
+
+
 def test_discover_report_outputs_returns_newest_report_per_extension(tmp_path: Path) -> None:
     markdown_old = tmp_path / "posture_aws_20260410_010101.md"
     markdown_new = tmp_path / "posture_aws_20260410_020202.md"
