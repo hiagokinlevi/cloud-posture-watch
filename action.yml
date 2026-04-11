@@ -1,0 +1,79 @@
+name: "Cloud Posture Watch"
+description: "Run cloud-posture-watch in GitHub Actions with validated CLI inputs and report outputs."
+author: "Hiago Kin Levi"
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  command:
+    description: "Supported k1n-posture subcommand to run."
+    required: true
+  args:
+    description: "Additional arguments for the selected subcommand. Do not include --provider or --output-dir here."
+    required: false
+    default: ""
+  provider:
+    description: "Cloud provider for commands that use the root CLI option."
+    required: false
+    default: "aws"
+  output-dir:
+    description: "Directory where generated reports should be written."
+    required: false
+    default: "./output"
+  python-version:
+    description: "Python version used to install and run cloud-posture-watch."
+    required: false
+    default: "3.11"
+  working-directory:
+    description: "Workspace directory where the CLI command should run."
+    required: false
+    default: "."
+
+outputs:
+  command:
+    description: "Resolved k1n-posture command that was executed."
+    value: ${{ steps.run.outputs.command }}
+  working-directory:
+    description: "Resolved working directory used for the CLI run."
+    value: ${{ steps.run.outputs.working_directory }}
+  output-directory:
+    description: "Resolved report output directory."
+    value: ${{ steps.run.outputs.output_directory }}
+  report-markdown:
+    description: "Newest Markdown report generated in the output directory, if any."
+    value: ${{ steps.run.outputs.report_markdown }}
+  report-json:
+    description: "Newest JSON report generated in the output directory, if any."
+    value: ${{ steps.run.outputs.report_json }}
+  report-html:
+    description: "Newest HTML report generated in the output directory, if any."
+    value: ${{ steps.run.outputs.report_html }}
+  exit-code:
+    description: "CLI exit code returned by the action entrypoint."
+    value: ${{ steps.run.outputs.exit_code }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install cloud-posture-watch
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install "${{ github.action_path }}"
+
+    - name: Run cloud-posture-watch
+      id: run
+      shell: bash
+      run: |
+        python "${{ github.action_path }}/scripts/github_action_entrypoint.py" \
+          --command "${{ inputs.command }}" \
+          --args "${{ inputs.args }}" \
+          --provider "${{ inputs.provider }}" \
+          --output-dir "${{ inputs.output-dir }}" \
+          --working-directory "${{ inputs.working-directory }}"

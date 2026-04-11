@@ -28,6 +28,7 @@
 - **Stable JSON contract** — publishes a v1 posture-report schema for downstream dashboards and CI tooling
 - **Markdown reports** — human-readable output with findings, scores, and remediation recommendations
 - **Watch mode for scheduled runs** — compares the latest JSON report to the prior snapshot and alerts only on newly introduced findings
+- **GitHub Action support** — composite Marketplace-ready action validates CLI inputs, installs the tool, and exposes generated report paths as workflow outputs
 - **Slack and Teams webhooks** — sends posture-report summaries to incoming webhooks or prints dry-run payloads for approval
 - **Extensible baselines** — minimal / standard / strict profiles, all customizable
 
@@ -272,28 +273,50 @@ Webhook notifications use saved JSON posture reports as input. `k1n-posture noti
 
 Watch mode is designed for scheduled runners that already refresh posture JSON artifacts. `k1n-posture watch-report --input latest.json --state-file .watch/aws.json --alert-on high --target slack|teams` compares the latest report to the previous snapshot, summarizes new, resolved, and persistent findings, updates the state file, and only emits an alert when newly introduced findings meet the configured severity threshold. By default the first run seeds state without alerting to avoid noisy bootstrap notifications; add `--alert-on-first-run` when an initial alert is desired.
 
+The repository now includes a composite GitHub Action in [`action.yml`](action.yml). It installs `cloud-posture-watch`, validates the requested `k1n-posture` subcommand without invoking a shell, runs inside the workflow workspace, and publishes the newest Markdown, JSON, and HTML report paths as step outputs for downstream upload or notification steps.
+
 ---
 
 ## Running in CI
 
 ```yaml
-# Example GitHub Actions step
-- name: Cloud posture check
-  run: k1n-posture assess --provider aws --profile standard --fail-on high
-  env:
-    AWS_ACCESS_KEY_ID: ${{ secrets.POSTURE_AWS_KEY_ID }}
-    AWS_SECRET_ACCESS_KEY: ${{ secrets.POSTURE_AWS_SECRET }}
-    AWS_REGION: us-east-1
+name: posture
 
-- name: Alert on newly introduced high findings
-  run: |
-    k1n-posture watch-report \
-      --input ./output/posture_aws_latest.json \
-      --state-file .watch/aws-watch-state.json \
-      --alert-on high \
-      --target slack \
-      --webhook-url "${{ secrets.POSTURE_SLACK_WEBHOOK }}"
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  assess:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run AWS posture assessment
+        id: posture
+        uses: hiagokinlevi/cloud-posture-watch@main
+        with:
+          command: assess
+          provider: aws
+          args: --profile standard --fail-on high
+          output-dir: ./output
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.POSTURE_AWS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.POSTURE_AWS_SECRET }}
+          AWS_REGION: us-east-1
+
+      - name: Upload Markdown report
+        if: ${{ steps.posture.outputs.report-markdown != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: posture-report
+          path: ${{ steps.posture.outputs.report-markdown }}
 ```
+
+Use `command: watch-report` with `args: --input ./output/posture_aws_latest.json --state-file .watch/aws-watch-state.json --alert-on high --target slack --webhook-url ${{ secrets.POSTURE_SLACK_WEBHOOK }}` when you want scheduled delta alerts instead of a fresh live assessment. Keep `--provider` and `--output-dir` in the dedicated action inputs so the action can validate and publish the resolved paths consistently.
 
 ---
 

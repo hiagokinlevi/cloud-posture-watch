@@ -32,6 +32,7 @@ Provider collector  -->  Analyzer(s)  -->  Findings  -->  Report
 5. **JSON schema contract** tags posture JSON reports with `$schema` and `schema_version`, and `k1n-posture json-schema` prints the stable v1 contract for downstream validators.
 6. **Webhook notification** can summarize an approved JSON posture report for Slack or Teams. Payloads include provider, run ID, severity counts, and the top findings. The webhook URL is supplied only at send time and is never printed in success output.
 7. **Watch mode** compares the latest posture JSON report to the prior snapshot, tracks newly introduced versus resolved findings, persists the latest snapshot for the next run, and can alert only when new findings meet a configured severity threshold.
+8. **GitHub Action entrypoint** validates subcommand selection plus root workflow inputs before invoking `k1n-posture`, so scheduled CI runs can reuse the same CLI surface without shell interpolation.
 
 ## Baseline profiles
 

@@ -28,6 +28,8 @@ For notification workflows, `k1n-posture notify-webhook --input posture.json --t
 
 For scheduled monitoring workflows, `k1n-posture watch-report --input posture.json --state-file .watch/aws.json --alert-on high --target slack|teams` compares the latest posture report to the previous snapshot, highlights newly introduced versus resolved findings, and emits an alert only when the new findings meet the configured severity threshold.
 
+For GitHub-native automation, the repository ships a composite action in `action.yml`. The action installs `cloud-posture-watch`, validates the requested `k1n-posture` subcommand and arguments, runs inside the workflow workspace, and publishes the newest report paths as outputs for follow-on artifact upload or notification steps.
+
 ## What this tool does
 
 1. **Collects** configuration state from cloud APIs using read-only credentials.
@@ -36,6 +38,7 @@ For scheduled monitoring workflows, `k1n-posture watch-report --input posture.js
 4. **Reports** findings in Markdown with severity ratings, risk scores, and remediation guidance.
 5. **Watches** scheduled JSON posture artifacts for newly introduced findings.
 6. **Notifies** Slack or Teams channels from approved JSON posture artifacts when an operator supplies an HTTPS incoming webhook.
+7. **Automates** repeatable GitHub Actions runs through the bundled composite action.
 
 ## What this tool does not do
 
