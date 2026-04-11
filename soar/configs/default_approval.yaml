@@ -1,0 +1,28 @@
+version: 1
+name: default-approval
+
+approval_modes:
+  critical: required
+  high: required
+  medium: recommended
+  low: optional
+
+execution_policy:
+  dry_run_default: true
+  require_owner_confirmation: true
+  require_ticket_reference: true
+  preserve_evidence_before_change: true
+
+allowed_preparation_actions:
+  - capture_bucket_policy
+  - capture_bucket_iam
+  - export_role_assignments
+  - preserve_cloudtrail
+  - review_access_logs
+  - review_key_status
+
+restricted_live_actions:
+  - disable_access_key
+  - remove_public_member
+  - change_bucket_policy
+  - remove_privileged_role

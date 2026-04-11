@@ -1,0 +1,71 @@
+version: 1
+name: cloud-response-rules
+description: >
+  Multicloud SOAR routing rules for cloud-posture-watch. These rules map
+  normalized alert flags and provider context to response playbooks, severity
+  overrides, and approval requirements.
+
+rules:
+  - id: AWS-SOAR-001
+    provider: aws
+    match:
+      flags: ["ROOT_KEY", "STALE_ACTIVE_KEY", "PERMISSIVE_POLICY"]
+      resource_types: ["iam_user", "root_account", "iam_policy"]
+    route:
+      playbook: soar/playbooks/aws/compromised_access_key.md
+      severity: critical
+      approval_required: true
+      actions:
+        - preserve_cloudtrail
+        - review_key_status
+        - prepare_rotation
+
+  - id: AWS-SOAR-002
+    provider: aws
+    match:
+      flags: ["PUBLIC_BUCKET", "ACL_PUBLIC", "PAB_DISABLED"]
+      resource_types: ["s3_bucket"]
+    route:
+      playbook: soar/playbooks/aws/public_s3_exposure.md
+      severity: high
+      approval_required: true
+      actions:
+        - capture_bucket_policy
+        - review_logging
+        - prepare_public_access_block
+
+  - id: AZURE-SOAR-001
+    provider: azure
+    match:
+      flags: ["BROAD_OWNER_ASSIGNMENT", "GUEST_PRIVILEGED_ASSIGNMENT", "SERVICE_PRINCIPAL_OWNER"]
+      resource_types: ["role_assignment", "service_principal"]
+    route:
+      playbook: soar/playbooks/azure/suspicious_service_principal.md
+      severity: high
+      approval_required: true
+      actions:
+        - export_role_assignments
+        - review_sign_in_logs
+        - prepare_role_reduction
+
+  - id: GCP-SOAR-001
+    provider: gcp
+    match:
+      flags: ["PUBLIC_BUCKET", "PUBLIC_MEMBER", "UNIFORM_ACCESS_DISABLED"]
+      resource_types: ["gcs_bucket"]
+    route:
+      playbook: soar/playbooks/gcp/public_storage_bucket.md
+      severity: high
+      approval_required: true
+      actions:
+        - capture_bucket_iam
+        - review_access_logs
+        - prepare_public_member_removal
+
+defaults:
+  approval_required: true
+  severity: medium
+  actions:
+    - capture_evidence
+    - identify_owner
+    - verify_business_context

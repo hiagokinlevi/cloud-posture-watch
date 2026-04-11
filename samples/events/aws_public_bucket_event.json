@@ -1,0 +1,9 @@
+{
+  "provider": "aws",
+  "resource_type": "s3_bucket",
+  "resource_name": "prod-customer-exports",
+  "flag": "PUBLIC_BUCKET",
+  "severity": "high",
+  "title": "Bucket is publicly accessible",
+  "recommendation": "Restrict public access and review data exposure."
+}
