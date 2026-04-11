@@ -51,6 +51,7 @@ def test_build_command_places_root_options_before_standard_subcommands(tmp_path:
         raw_args="--profile strict --fail-on high",
         provider="gcp",
         output_dir=tmp_path / "reports",
+        workdir=tmp_path,
     )
 
     assert command == [
@@ -73,6 +74,7 @@ def test_build_command_places_scan_output_dir_after_subcommand(tmp_path: Path) -
         raw_args="--providers aws,gcp --fail-on high",
         provider="aws",
         output_dir=tmp_path / "scan-output",
+        workdir=tmp_path,
     )
 
     assert command == [
@@ -145,6 +147,83 @@ def test_resolve_output_directory_rejects_absolute_escape(
 
     with pytest.raises(ValueError, match="Output directory must stay within the GitHub workspace"):
         resolve_output_directory(str(tmp_path / "outside"), workdir)
+
+
+def test_build_command_resolves_path_bearing_args_within_workspace(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    repo = workspace / "repo"
+    reports_dir = repo / "reports"
+    reports_dir.mkdir(parents=True)
+    current_report = reports_dir / "current.json"
+    current_report.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+
+    command = build_command(
+        subcommand="watch-report",
+        raw_args="--input reports/current.json --state-file .watch/latest.json --alert-on high",
+        provider="aws",
+        output_dir=repo / "output",
+        workdir=repo,
+    )
+
+    assert command == [
+        "k1n-posture",
+        "--provider",
+        "aws",
+        "--output-dir",
+        str((repo / "output").resolve()),
+        "watch-report",
+        "--input",
+        str(current_report.resolve()),
+        "--state-file",
+        str((repo / ".watch" / "latest.json").resolve()),
+        "--alert-on",
+        "high",
+    ]
+
+
+def test_build_command_rejects_path_escape_in_args(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    repo = workspace / "repo"
+    repo.mkdir(parents=True)
+    input_path = repo / "current.json"
+    input_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+
+    with pytest.raises(
+        ValueError,
+        match=r"Argument --state-file must stay within the GitHub workspace",
+    ):
+        build_command(
+            subcommand="watch-report",
+            raw_args="--input current.json --state-file ../../outside.json",
+            provider="aws",
+            output_dir=repo / "output",
+            workdir=repo,
+        )
+
+
+def test_build_command_rejects_directory_for_input_args(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    repo = workspace / "repo"
+    input_dir = repo / "inputs"
+    input_dir.mkdir(parents=True)
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+
+    with pytest.raises(ValueError, match=r"Argument --input must resolve to a file path"):
+        build_command(
+            subcommand="report",
+            raw_args="--input inputs",
+            provider="aws",
+            output_dir=repo / "output",
+            workdir=repo,
+        )
 
 
 def test_discover_report_outputs_returns_newest_report_per_extension(

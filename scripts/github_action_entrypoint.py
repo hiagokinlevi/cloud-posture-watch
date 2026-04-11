@@ -38,6 +38,15 @@ REPORT_PATTERNS = {
     "report_json": "posture_*.json",
     "report_html": "posture_*.html",
 }
+PATH_ARG_SPECS = {
+    "--baseline": {"must_exist": True},
+    "--input": {"must_exist": True},
+    "--previous": {"must_exist": True},
+    "--state-file": {"must_exist": False},
+    "--aws-input": {"must_exist": True},
+    "--azure-input": {"must_exist": True},
+    "--gcp-input": {"must_exist": True},
+}
 
 
 def _resolve_workspace_root() -> Path:
@@ -116,16 +125,66 @@ def resolve_output_directory(raw_output_dir: str, workdir: Path) -> Path:
     return _ensure_within_workspace(path.resolve(), label="Output directory", workspace=workspace)
 
 
+def _resolve_action_arg_path(raw_path: str, *, flag: str, workdir: Path) -> str:
+    """Resolve a path-bearing action arg against the working directory."""
+    workspace = _resolve_workspace_root()
+    path = Path(raw_path)
+    if not path.is_absolute():
+        path = workdir / path
+    resolved = _ensure_within_workspace(
+        path.resolve(),
+        label=f"Argument {flag}",
+        workspace=workspace,
+    )
+    spec = PATH_ARG_SPECS[flag]
+    if spec["must_exist"] and not resolved.exists():
+        raise ValueError(f"Argument {flag} does not exist: {resolved}")
+    if resolved.exists() and resolved.is_dir():
+        raise ValueError(f"Argument {flag} must resolve to a file path: {resolved}")
+    return str(resolved)
+
+
+def resolve_action_arg_paths(tokens: list[str], *, workdir: Path) -> list[str]:
+    """Normalize path-bearing args and keep them inside the GitHub workspace."""
+    normalized: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        flag, separator, inline_value = token.partition("=")
+        spec = PATH_ARG_SPECS.get(flag)
+        if spec is None:
+            normalized.append(token)
+            index += 1
+            continue
+
+        if separator:
+            if not inline_value:
+                raise ValueError(f"Argument {flag} requires a path value.")
+            normalized.append(
+                f"{flag}={_resolve_action_arg_path(inline_value, flag=flag, workdir=workdir)}"
+            )
+            index += 1
+            continue
+
+        if index + 1 >= len(tokens):
+            raise ValueError(f"Argument {flag} requires a path value.")
+        normalized.append(token)
+        normalized.append(_resolve_action_arg_path(tokens[index + 1], flag=flag, workdir=workdir))
+        index += 2
+    return normalized
+
+
 def build_command(
     *,
     subcommand: str,
     raw_args: str,
     provider: str,
     output_dir: Path,
+    workdir: Path,
 ) -> list[str]:
     """Construct the validated k1n-posture command."""
     command = validate_command(subcommand)
-    extra_args = parse_action_args(raw_args)
+    extra_args = resolve_action_arg_paths(parse_action_args(raw_args), workdir=workdir)
 
     if command == "scan":
         return [
@@ -210,6 +269,7 @@ def main(argv: list[str] | None = None) -> int:
             raw_args=parsed.args,
             provider=parsed.provider,
             output_dir=output_dir,
+            workdir=workdir,
         )
     except ValueError as exc:
         print(f"Action input error: {exc}", file=sys.stderr)
