@@ -59,7 +59,18 @@ def parse_action_args(raw_args: str) -> list[str]:
         tokens = shlex.split(raw_args, posix=True)
     except ValueError as exc:
         raise ValueError(f"Unable to parse args: {exc}") from exc
-    forbidden = [token for token in tokens if token in FORBIDDEN_ARG_TOKENS]
+    forbidden = []
+    for token in tokens:
+        matched = next(
+            (
+                reserved
+                for reserved in FORBIDDEN_ARG_TOKENS
+                if token == reserved or token.startswith(f"{reserved}=")
+            ),
+            None,
+        )
+        if matched:
+            forbidden.append(matched)
     if forbidden:
         joined = ", ".join(sorted(set(forbidden)))
         raise ValueError(

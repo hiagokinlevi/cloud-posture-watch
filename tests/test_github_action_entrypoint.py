@@ -27,6 +27,23 @@ def test_parse_action_args_rejects_root_level_provider_and_output_dir_flags() ->
         parse_action_args("--output-dir ./tmp")
 
 
+def test_parse_action_args_rejects_equals_style_root_flags() -> None:
+    with pytest.raises(ValueError, match=r"Do not pass --provider"):
+        parse_action_args("--provider=aws --fail-on high")
+
+    with pytest.raises(ValueError, match=r"Do not pass --output-dir"):
+        parse_action_args("--output-dir=./tmp")
+
+
+def test_parse_action_args_allows_scan_providers_flag() -> None:
+    assert parse_action_args("--providers aws,gcp --fail-on high") == [
+        "--providers",
+        "aws,gcp",
+        "--fail-on",
+        "high",
+    ]
+
+
 def test_build_command_places_root_options_before_standard_subcommands(tmp_path: Path) -> None:
     command = build_command(
         subcommand="assess",
