@@ -123,6 +123,8 @@ def resolve_output_directory(raw_output_dir: str, workdir: Path) -> Path:
     path = Path(raw_output_dir)
     if not path.is_absolute():
         path = workdir / path
+    if path.is_symlink():
+        raise ValueError(f"Output directory must not be a symlink: {path}")
     resolved = _ensure_within_workspace(
         path.resolve(),
         label="Output directory",

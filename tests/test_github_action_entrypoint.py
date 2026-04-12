@@ -165,6 +165,22 @@ def test_resolve_output_directory_rejects_existing_file(
         resolve_output_directory("output.txt", workdir)
 
 
+def test_resolve_output_directory_rejects_symlink_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    reports_dir = workspace / "reports"
+    reports_dir.mkdir()
+    output_link = workspace / "output-link"
+    output_link.symlink_to(reports_dir, target_is_directory=True)
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+    workdir = resolve_working_directory(".")
+
+    with pytest.raises(ValueError, match="Output directory must not be a symlink"):
+        resolve_output_directory("output-link", workdir)
+
+
 def test_build_command_resolves_path_bearing_args_within_workspace(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
