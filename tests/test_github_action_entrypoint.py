@@ -274,6 +274,29 @@ def test_build_command_rejects_missing_path_value_before_next_flag(
         )
 
 
+def test_build_command_rejects_absolute_path_args(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    repo = workspace / "repo"
+    repo.mkdir(parents=True)
+    input_path = repo / "current.json"
+    input_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+
+    with pytest.raises(
+        ValueError,
+        match=r"Argument --input must be a relative path inside the GitHub workspace",
+    ):
+        build_command(
+            subcommand="report",
+            raw_args=f"--input {input_path.resolve()}",
+            provider="aws",
+            output_dir=repo / "output",
+            workdir=repo,
+        )
+
+
 def test_build_command_rejects_directory_for_input_args(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

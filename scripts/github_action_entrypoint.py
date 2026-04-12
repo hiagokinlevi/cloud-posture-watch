@@ -139,11 +139,12 @@ def _looks_like_option_token(value: str) -> bool:
 
 
 def _resolve_action_arg_path(raw_path: str, *, flag: str, workdir: Path) -> str:
-    """Resolve a path-bearing action arg against the working directory."""
+    """Resolve file-bearing action args against the working directory."""
     workspace = _resolve_workspace_root()
     path = Path(raw_path)
-    if not path.is_absolute():
-        path = workdir / path
+    if path.is_absolute():
+        raise ValueError(f"Argument {flag} must be a relative path inside the GitHub workspace.")
+    path = workdir / path
     resolved = _ensure_within_workspace(
         path.resolve(),
         label=f"Argument {flag}",
@@ -158,7 +159,7 @@ def _resolve_action_arg_path(raw_path: str, *, flag: str, workdir: Path) -> str:
 
 
 def resolve_action_arg_paths(tokens: list[str], *, workdir: Path) -> list[str]:
-    """Normalize path-bearing args and keep them inside the GitHub workspace."""
+    """Normalize file-bearing args and keep them inside the GitHub workspace."""
     normalized: list[str] = []
     index = 0
     while index < len(tokens):
