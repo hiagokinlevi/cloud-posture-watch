@@ -122,7 +122,19 @@ def resolve_output_directory(raw_output_dir: str, workdir: Path) -> Path:
     path = Path(raw_output_dir)
     if not path.is_absolute():
         path = workdir / path
-    return _ensure_within_workspace(path.resolve(), label="Output directory", workspace=workspace)
+    resolved = _ensure_within_workspace(
+        path.resolve(),
+        label="Output directory",
+        workspace=workspace,
+    )
+    if resolved.exists() and not resolved.is_dir():
+        raise ValueError(f"Output directory must resolve to a directory path: {resolved}")
+    return resolved
+
+
+def _looks_like_option_token(value: str) -> bool:
+    """Treat leading-dash values as missing paths for file-bearing flags."""
+    return value.startswith("-") and value != "-"
 
 
 def _resolve_action_arg_path(raw_path: str, *, flag: str, workdir: Path) -> str:
@@ -167,6 +179,8 @@ def resolve_action_arg_paths(tokens: list[str], *, workdir: Path) -> list[str]:
             continue
 
         if index + 1 >= len(tokens):
+            raise ValueError(f"Argument {flag} requires a path value.")
+        if _looks_like_option_token(tokens[index + 1]):
             raise ValueError(f"Argument {flag} requires a path value.")
         normalized.append(token)
         normalized.append(_resolve_action_arg_path(tokens[index + 1], flag=flag, workdir=workdir))

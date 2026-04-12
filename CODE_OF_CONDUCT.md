@@ -24,7 +24,7 @@ We as contributors and maintainers pledge to make participation in this project 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behaviour may be reported by opening a private report via GitHub's contact mechanisms. All complaints will be reviewed and investigated promptly and fairly. Maintainers are obligated to maintain confidentiality regarding the reporter of an incident.
+Instances of abusive, harassing, or otherwise unacceptable behaviour may be reported to **hiagokinlevi@protonmail.com**. All complaints will be reviewed and investigated promptly and fairly. Maintainers are obligated to maintain confidentiality regarding the reporter of an incident.
 
 ## Attribution
 

@@ -10,7 +10,7 @@
 
 If you discover a security vulnerability in `cloud-posture-watch`, please **do not** open a public GitHub issue. Instead, report it privately so we can address it before public disclosure.
 
-**Report via:** GitHub's private vulnerability reporting feature (Security > Report a vulnerability on this repository).
+**Report via:** **hiagokinlevi@protonmail.com** or GitHub's private vulnerability reporting feature (Security > Report a vulnerability on this repository).
 
 Please include:
 

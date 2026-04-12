@@ -150,6 +150,20 @@ def test_resolve_output_directory_rejects_absolute_escape(
         resolve_output_directory(str(tmp_path / "outside"), workdir)
 
 
+def test_resolve_output_directory_rejects_existing_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    output_file = workspace / "output.txt"
+    output_file.write_text("not a directory", encoding="utf-8")
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+    workdir = resolve_working_directory(".")
+
+    with pytest.raises(ValueError, match="Output directory must resolve to a directory path"):
+        resolve_output_directory("output.txt", workdir)
+
+
 def test_build_command_resolves_path_bearing_args_within_workspace(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -185,6 +199,39 @@ def test_build_command_resolves_path_bearing_args_within_workspace(
     ]
 
 
+def test_build_command_resolves_equals_style_path_args_within_workspace(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    repo = workspace / "repo"
+    reports_dir = repo / "reports"
+    reports_dir.mkdir(parents=True)
+    current_report = reports_dir / "current.json"
+    current_report.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+
+    command = build_command(
+        subcommand="watch-report",
+        raw_args="--input=reports/current.json --state-file=.watch/latest.json --alert-on high",
+        provider="aws",
+        output_dir=repo / "output",
+        workdir=repo,
+    )
+
+    assert command == [
+        "k1n-posture",
+        "--provider",
+        "aws",
+        "--output-dir",
+        str((repo / "output").resolve()),
+        "watch-report",
+        f"--input={current_report.resolve()}",
+        f"--state-file={(repo / '.watch' / 'latest.json').resolve()}",
+        "--alert-on",
+        "high",
+    ]
+
+
 def test_build_command_rejects_path_escape_in_args(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -202,6 +249,24 @@ def test_build_command_rejects_path_escape_in_args(
         build_command(
             subcommand="watch-report",
             raw_args="--input current.json --state-file ../../outside.json",
+            provider="aws",
+            output_dir=repo / "output",
+            workdir=repo,
+        )
+
+
+def test_build_command_rejects_missing_path_value_before_next_flag(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    repo = workspace / "repo"
+    repo.mkdir(parents=True)
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+
+    with pytest.raises(ValueError, match=r"Argument --input requires a path value"):
+        build_command(
+            subcommand="watch-report",
+            raw_args="--input --state-file .watch/latest.json",
             provider="aws",
             output_dir=repo / "output",
             workdir=repo,
