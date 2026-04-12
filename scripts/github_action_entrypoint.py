@@ -33,6 +33,7 @@ SUPPORTED_COMMANDS = {
 }
 
 FORBIDDEN_ARG_TOKENS = {"--provider", "--output-dir"}
+SENSITIVE_ARG_TOKENS = {"--webhook-url"}
 REPORT_PATTERNS = {
     "report_markdown": "posture_*.md",
     "report_json": "posture_*.json",
@@ -244,6 +245,28 @@ def discover_report_outputs(output_dir: Path) -> dict[str, str]:
     return results
 
 
+def redact_command_for_output(command: list[str]) -> str:
+    """Return a shell-joined command string with sensitive arg values redacted."""
+    redacted: list[str] = []
+    index = 0
+    while index < len(command):
+        token = command[index]
+        flag, separator, _value = token.partition("=")
+        if flag in SENSITIVE_ARG_TOKENS:
+            if separator:
+                redacted.append(f"{flag}=***REDACTED***")
+                index += 1
+                continue
+            redacted.append(token)
+            if index + 1 < len(command):
+                redacted.append("***REDACTED***")
+                index += 2
+                continue
+        redacted.append(token)
+        index += 1
+    return shlex.join(redacted)
+
+
 def write_github_outputs(outputs: dict[str, str]) -> None:
     """Append output variables when running inside GitHub Actions."""
     output_path = os.environ.get("GITHUB_OUTPUT")
@@ -310,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     completed = subprocess.run(command, cwd=workdir, check=False)
     outputs = {
-        "command": shlex.join(command),
+        "command": redact_command_for_output(command),
         "working_directory": str(workdir),
         "output_directory": str(output_dir),
         "exit_code": str(completed.returncode),

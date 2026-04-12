@@ -295,7 +295,7 @@ Webhook notifications use saved JSON posture reports as input. `k1n-posture noti
 
 Watch mode is designed for scheduled runners that already refresh posture JSON artifacts. `k1n-posture watch-report --input latest.json --state-file .watch/aws.json --alert-on high --target slack|teams` compares the latest report to the previous snapshot, summarizes new, resolved, and persistent findings, updates the state file, and only emits an alert when newly introduced findings meet the configured severity threshold. By default the first run seeds state without alerting to avoid noisy bootstrap notifications; add `--alert-on-first-run` when an initial alert is desired.
 
-The repository now includes a composite GitHub Action in [`action.yml`](action.yml). It installs `cloud-posture-watch`, validates the requested `k1n-posture` subcommand without invoking a shell, runs inside the workflow workspace, and publishes the newest Markdown, JSON, HTML, and SARIF report paths as step outputs for downstream upload or notification steps.
+The repository now includes a composite GitHub Action in [`action.yml`](action.yml). It installs `cloud-posture-watch`, validates the requested `k1n-posture` subcommand without invoking a shell, runs inside the workflow workspace, redacts sensitive CLI values from the exposed command output, and publishes the newest Markdown, JSON, HTML, and SARIF report paths as step outputs for downstream upload or notification steps.
 
 To publish SARIF into GitHub Code Scanning, run a JSON-producing command first and then convert that JSON artifact into SARIF with `posture-report`.
 

@@ -9,6 +9,7 @@ from scripts.github_action_entrypoint import (
     discover_report_outputs,
     main,
     parse_action_args,
+    redact_command_for_output,
     resolve_output_directory,
     resolve_working_directory,
     validate_command,
@@ -405,3 +406,40 @@ def test_main_returns_controlled_error_for_invalid_github_output(
 
     assert exit_code == 2
     assert "Action output error:" in capsys.readouterr().err
+
+
+def test_redact_command_for_output_hides_webhook_url_values() -> None:
+    command = [
+        "k1n-posture",
+        "--provider",
+        "aws",
+        "--output-dir",
+        "/workspace/output",
+        "watch-report",
+        "--input",
+        "/workspace/output/posture.json",
+        "--webhook-url",
+        "https://hooks.slack.com/services/T000/B000/SECRET",
+        "--alert-on",
+        "high",
+    ]
+
+    rendered = redact_command_for_output(command)
+
+    assert "--webhook-url '***REDACTED***'" in rendered
+    assert "SECRET" not in rendered
+
+
+def test_redact_command_for_output_hides_inline_webhook_url_values() -> None:
+    rendered = redact_command_for_output(
+        [
+            "k1n-posture",
+            "notify-webhook",
+            "--input",
+            "/workspace/output/posture.json",
+            "--webhook-url=https://hooks.slack.com/services/T000/B000/SECRET",
+        ]
+    )
+
+    assert "'--webhook-url=***REDACTED***'" in rendered
+    assert "SECRET" not in rendered
