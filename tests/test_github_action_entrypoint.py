@@ -7,6 +7,7 @@ import pytest
 from scripts.github_action_entrypoint import (
     build_command,
     discover_report_outputs,
+    main,
     parse_action_args,
     resolve_output_directory,
     resolve_working_directory,
@@ -18,10 +19,6 @@ from scripts.github_action_entrypoint import (
 def test_validate_command_rejects_unknown_subcommand() -> None:
     with pytest.raises(ValueError, match="Unsupported command"):
         validate_command("rm -rf")
-
-
-def test_validate_command_accepts_posture_report() -> None:
-    assert validate_command("posture-report") == "posture-report"
 
 
 def test_parse_action_args_rejects_root_level_provider_and_output_dir_flags() -> None:
@@ -238,19 +235,16 @@ def test_discover_report_outputs_returns_newest_report_per_extension(
     markdown_old = tmp_path / "posture_aws_20260410_010101.md"
     markdown_new = tmp_path / "posture_aws_20260410_020202.md"
     json_report = tmp_path / "posture_aws_20260410_020202.json"
-    sarif_report = tmp_path / "posture_aws_20260410_020202.sarif"
 
     markdown_old.write_text("old", encoding="utf-8")
     markdown_new.write_text("new", encoding="utf-8")
     json_report.write_text("{}", encoding="utf-8")
-    sarif_report.write_text("{}", encoding="utf-8")
 
     outputs = discover_report_outputs(tmp_path)
 
     assert outputs["report_markdown"] == str(markdown_new.resolve())
     assert outputs["report_json"] == str(json_report.resolve())
     assert outputs["report_html"] == ""
-    assert outputs["report_sarif"] == str(sarif_report.resolve())
 
 
 def test_discover_report_outputs_ignores_symlink_escape(
@@ -287,3 +281,62 @@ def test_write_github_outputs_uses_multiline_format_for_newline_values(
     assert contents.startswith("report_markdown<<CPW_OUTPUT_")
     assert "safe\ninjected=value\nCPW_OUTPUT_" in contents
     assert "report_markdown=safe" not in contents
+
+
+def test_write_github_outputs_rejects_symlink_target(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    target_file = tmp_path / "target.txt"
+    target_file.write_text("", encoding="utf-8")
+    output_file = tmp_path / "github_output.txt"
+    output_file.symlink_to(target_file)
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_file))
+
+    with pytest.raises(ValueError, match="must not be a symlink"):
+        write_github_outputs({"report_markdown": "safe"})
+
+
+def test_write_github_outputs_rejects_directory_target(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    output_dir = tmp_path / "github_output"
+    output_dir.mkdir()
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_dir))
+
+    with pytest.raises(ValueError, match="must be a regular file path"):
+        write_github_outputs({"report_markdown": "safe"})
+
+
+def test_main_returns_controlled_error_for_invalid_github_output(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    output_dir = workspace / "reports"
+    output_dir.mkdir()
+    github_output = workspace / "github_output"
+    github_output.mkdir()
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+
+    def _fake_run(command: list[str], cwd: Path, check: bool) -> object:
+        assert command[0] == "k1n-posture"
+        assert cwd == workspace
+        assert check is False
+        return type("Completed", (), {"returncode": 0})()
+
+    monkeypatch.setattr("scripts.github_action_entrypoint.subprocess.run", _fake_run)
+
+    exit_code = main(
+        [
+            "--command",
+            "scan",
+            "--output-dir",
+            str(output_dir),
+            "--working-directory",
+            str(workspace),
+        ]
+    )
+
+    assert exit_code == 2
+    assert "Action output error:" in capsys.readouterr().err

@@ -15,7 +15,6 @@ SUPPORTED_COMMANDS = {
     "assess",
     "drift",
     "report",
-    "posture-report",
     "scan",
     "scan-azure-nsgs",
     "scan-gcp-firewalls",
@@ -38,7 +37,6 @@ REPORT_PATTERNS = {
     "report_markdown": "posture_*.md",
     "report_json": "posture_*.json",
     "report_html": "posture_*.html",
-    "report_sarif": "posture_*.sarif",
 }
 PATH_ARG_SPECS = {
     "--baseline": {"must_exist": True},
@@ -237,7 +235,25 @@ def write_github_outputs(outputs: dict[str, str]) -> None:
     output_path = os.environ.get("GITHUB_OUTPUT")
     if not output_path:
         return
-    with Path(output_path).open("a", encoding="utf-8") as handle:
+    output_file = Path(output_path)
+    if output_file.is_symlink():
+        raise ValueError(f"GITHUB_OUTPUT must not be a symlink: {output_file}")
+    parent = output_file.parent
+    if not parent.exists():
+        raise ValueError(f"GITHUB_OUTPUT parent directory does not exist: {parent}")
+    if not parent.is_dir():
+        raise ValueError(f"GITHUB_OUTPUT parent directory is not a directory: {parent}")
+    if output_file.exists() and not output_file.is_file():
+        raise ValueError(f"GITHUB_OUTPUT must be a regular file path: {output_file}")
+
+    flags = os.O_APPEND | os.O_CREAT | os.O_WRONLY
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(output_file, flags, 0o600)
+    except OSError as exc:
+        raise ValueError(f"Unable to open GITHUB_OUTPUT safely: {output_file}") from exc
+
+    with os.fdopen(fd, "a", encoding="utf-8") as handle:
         for key, value in outputs.items():
             delimiter = f"CPW_OUTPUT_{uuid4().hex}"
             while delimiter in value:
@@ -286,7 +302,11 @@ def main(argv: list[str] | None = None) -> int:
         "exit_code": str(completed.returncode),
         **discover_report_outputs(output_dir),
     }
-    write_github_outputs(outputs)
+    try:
+        write_github_outputs(outputs)
+    except ValueError as exc:
+        print(f"Action output error: {exc}", file=sys.stderr)
+        return completed.returncode or 2
     return completed.returncode
 
 
