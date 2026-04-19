@@ -58,4 +58,4 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
 
 ## Automated Completions
-- [x] Public Exposure Detection Engine (cycle 2)
+- [x] Exposure Path Analyzer (cycle 18)
