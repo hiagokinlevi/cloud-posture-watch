@@ -58,4 +58,4 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
 
 ## Automated Completions
-- [x] Containerized Scanner Deployment (cycle 23)
+- [x] SARIF Security Findings Export (cycle 24)
