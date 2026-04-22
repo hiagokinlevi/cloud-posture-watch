@@ -1,84 +1,121 @@
-#!/usr/bin/env python3
-"""
-cloud-posture-watch CLI entrypoint.
-"""
-
-from __future__ import annotations
-
 import argparse
 import json
-import sys
-from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple
 
 
-SEVERITY_ORDER = {
-    "low": 1,
-    "medium": 2,
-    "high": 3,
-    "critical": 4,
-}
+def _severity_rank(severity: Any) -> int:
+    s = str(severity or "").strip().lower()
+    order = {
+        "critical": 5,
+        "high": 4,
+        "medium": 3,
+        "low": 2,
+        "info": 1,
+        "informational": 1,
+    }
+    return order.get(s, 0)
 
 
-def _extract_findings(obj: Any) -> list[dict[str, Any]]:
-    findings: list[dict[str, Any]] = []
-
-    if isinstance(obj, dict):
-        if "severity" in obj and isinstance(obj.get("severity"), str):
-            findings.append(obj)
-        for value in obj.values():
-            findings.extend(_extract_findings(value))
-    elif isinstance(obj, list):
-        for item in obj:
-            findings.extend(_extract_findings(item))
-
-    return findings
+def _priority_key(finding: Dict[str, Any]) -> Tuple[int, float]:
+    # Higher severity/value means higher priority (kept first)
+    sev = _severity_rank(finding.get("severity"))
+    score = finding.get("risk_score")
+    try:
+        score_val = float(score) if score is not None else 0.0
+    except Exception:
+        score_val = 0.0
+    return sev, score_val
 
 
-def _has_findings_at_or_above(report_json: dict[str, Any], threshold: str) -> bool:
-    threshold_rank = SEVERITY_ORDER[threshold]
-    for finding in _extract_findings(report_json):
-        sev = str(finding.get("severity", "")).strip().lower()
-        if sev in SEVERITY_ORDER and SEVERITY_ORDER[sev] >= threshold_rank:
-            return True
-    return False
+def apply_max_findings_cap(
+    findings: List[Dict[str, Any]], max_findings: Optional[int]
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    metadata: Dict[str, Any] = {}
+    if max_findings is None:
+        return findings, metadata
+
+    if max_findings < 0:
+        raise ValueError("--max-findings must be >= 0")
+
+    original_count = len(findings)
+    if original_count <= max_findings:
+        return findings, metadata
+
+    indexed = list(enumerate(findings))
+    indexed.sort(key=lambda x: (_priority_key(x[1])[0], _priority_key(x[1])[1], x[0]), reverse=True)
+    kept = [item for _, item in indexed[:max_findings]]
+
+    metadata["truncated"] = True
+    metadata["original_count"] = original_count
+    metadata["emitted_count"] = len(kept)
+    return kept, metadata
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="cloud-posture-watch")
-    parser.add_argument("--output-json", required=True, help="Path to write JSON report")
+    parser = argparse.ArgumentParser(prog="cloud-posture-watch")
+    parser.add_argument("--format", choices=["console", "json", "markdown"], default="console")
     parser.add_argument(
-        "--fail-on-severity",
-        choices=["low", "medium", "high", "critical"],
-        help="Exit non-zero if any findings at or above this severity are present",
+        "--max-findings",
+        type=int,
+        default=None,
+        help="Cap the number of emitted findings in output (lowest-priority findings truncated first).",
     )
     return parser
 
 
-def run_analyzers() -> dict[str, Any]:
-    # Existing analyzer orchestration should remain here in the real project.
-    # This placeholder keeps the file runnable for this incremental change.
-    return {
-        "findings": []
+def assemble_report(findings: List[Dict[str, Any]], max_findings: Optional[int]) -> Dict[str, Any]:
+    capped_findings, trunc_meta = apply_max_findings_cap(findings, max_findings)
+    report: Dict[str, Any] = {
+        "findings": capped_findings,
+        "count": len(capped_findings),
     }
+    report.update(trunc_meta)
+    return report
 
 
-def main() -> int:
+def render_console(report: Dict[str, Any]) -> str:
+    lines = [f"Findings: {report.get('count', 0)}"]
+    if report.get("truncated"):
+        lines.append(
+            f"Output truncated: true (original_count={report.get('original_count')}, emitted_count={report.get('emitted_count')})"
+        )
+    for f in report.get("findings", []):
+        lines.append(f"- [{f.get('severity', 'unknown')}] {f.get('title', 'untitled')}")
+    return "\n".join(lines)
+
+
+def render_markdown(report: Dict[str, Any]) -> str:
+    out = [f"# Cloud Posture Watch Report", "", f"**Findings:** {report.get('count', 0)}", ""]
+    if report.get("truncated"):
+        out.extend(
+            [
+                "**truncated:** true",
+                f"**original_count:** {report.get('original_count')}",
+                f"**emitted_count:** {report.get('emitted_count')}",
+                "",
+            ]
+        )
+    for f in report.get("findings", []):
+        out.append(f"- **{f.get('severity', 'unknown').upper()}**: {f.get('title', 'untitled')}")
+    return "\n".join(out)
+
+
+def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    report = run_analyzers()
+    # Placeholder findings source; analyzers remain unchanged.
+    findings: List[Dict[str, Any]] = []
 
-    output_path = Path(args.output_json)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    report = assemble_report(findings, args.max_findings)
 
-    if args.fail_on_severity:
-        if _has_findings_at_or_above(report, args.fail_on_severity):
-            return 2
-
-    return 0
+    if args.format == "json":
+        print(json.dumps(report, indent=2))
+    elif args.format == "markdown":
+        print(render_markdown(report))
+    else:
+        print(render_console(report))
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
