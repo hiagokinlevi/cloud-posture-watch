@@ -58,4 +58,4 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
 
 ## Automated Completions
-- [x] Baseline Schema Validation Before Scan (cycle 27)
+- [x] Provider-Scoped Execution Flag (cycle 28)
