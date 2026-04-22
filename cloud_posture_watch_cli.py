@@ -1,153 +1,86 @@
-#!/usr/bin/env python3
+from __future__ import annotations
+
 import argparse
 import json
-import os
-import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-import yaml
+from analyzers.exposure import analyze_exposure
+from analyzers.logging import analyze_logging
+from analyzers.drift import analyze_drift
 
-
-class BaselineValidationError(Exception):
-    """Raised when baseline validation fails."""
-
-
-def _type_name(value):
-    if isinstance(value, bool):
-        return "boolean"
-    if isinstance(value, int):
-        return "integer"
-    if isinstance(value, float):
-        return "number"
-    if isinstance(value, str):
-        return "string"
-    if isinstance(value, list):
-        return "array"
-    if isinstance(value, dict):
-        return "object"
-    if value is None:
-        return "null"
-    return type(value).__name__
+from providers.aws import collect_aws
+from providers.azure import collect_azure
+from providers.gcp import collect_gcp
 
 
-def _expected_type_name(schema_type):
-    if isinstance(schema_type, list):
-        return " or ".join(str(t) for t in schema_type)
-    return str(schema_type)
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
-def _validate_node(data, schema, file_path, key_path="$"):
-    if not isinstance(schema, dict):
-        return
-
-    expected_type = schema.get("type")
-
-    if expected_type == "object":
-        if not isinstance(data, dict):
-            raise BaselineValidationError(
-                f"Baseline validation failed: file={file_path}, key={key_path}, "
-                f"expected type=object, actual type={_type_name(data)}"
-            )
-
-        properties = schema.get("properties", {})
-        required = schema.get("required", [])
-
-        for req_key in required:
-            if req_key not in data:
-                raise BaselineValidationError(
-                    f"Baseline validation failed: file={file_path}, key={key_path}.{req_key}, "
-                    "expected key is required but missing"
-                )
-
-        additional_properties = schema.get("additionalProperties", True)
-        if additional_properties is False:
-            unknown = [k for k in data.keys() if k not in properties]
-            if unknown:
-                bad = unknown[0]
-                raise BaselineValidationError(
-                    f"Baseline validation failed: file={file_path}, key={key_path}.{bad}, "
-                    "unexpected key not allowed by schema"
-                )
-
-        for prop, prop_schema in properties.items():
-            if prop in data:
-                _validate_node(data[prop], prop_schema, file_path, f"{key_path}.{prop}")
-
-    elif expected_type == "array":
-        if not isinstance(data, list):
-            raise BaselineValidationError(
-                f"Baseline validation failed: file={file_path}, key={key_path}, "
-                f"expected type=array, actual type={_type_name(data)}"
-            )
-
-        item_schema = schema.get("items")
-        if item_schema:
-            for idx, item in enumerate(data):
-                _validate_node(item, item_schema, file_path, f"{key_path}[{idx}]")
-
-    elif expected_type:
-        type_map = {
-            "string": str,
-            "integer": int,
-            "number": (int, float),
-            "boolean": bool,
-            "null": type(None),
-        }
-
-        expected_python = type_map.get(expected_type)
-        if expected_python and not isinstance(data, expected_python):
-            raise BaselineValidationError(
-                f"Baseline validation failed: file={file_path}, key={key_path}, "
-                f"expected type={_expected_type_name(expected_type)}, actual type={_type_name(data)}"
-            )
+def _write_json(path: Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def validate_baseline_file_against_schema(baseline_file, schema_file):
-    baseline_path = Path(baseline_file)
-    schema_path = Path(schema_file)
-
-    if not baseline_path.exists():
-        raise BaselineValidationError(f"Baseline file not found: {baseline_file}")
-    if not schema_path.exists():
-        raise BaselineValidationError(f"Schema file not found: {schema_file}")
-
-    with baseline_path.open("r", encoding="utf-8") as bf:
-        baseline_data = yaml.safe_load(bf) or {}
-
-    with schema_path.open("r", encoding="utf-8") as sf:
-        schema_data = json.load(sf)
-
-    _validate_node(baseline_data, schema_data, str(baseline_path), "$")
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="cloud-posture-watch",
+        description="Cloud posture assessment for AWS, Azure, and GCP.",
+    )
+    parser.add_argument("--baseline", default="standard", help="Baseline profile name")
+    parser.add_argument("--out", default="reports/posture-report.json", help="Output report path")
+    parser.add_argument(
+        "--provider",
+        choices=["aws", "azure", "gcp"],
+        help="Run only one provider collector/analyzer path (aws|azure|gcp)",
+    )
+    return parser
 
 
-def _default_schema_for_provider(provider):
-    base = Path(__file__).resolve().parent
-    return str(base / "schemas" / f"{provider}_baseline.schema.json")
+def main(argv: Optional[List[str]] = None) -> int:
+    args = _build_parser().parse_args(argv)
 
+    requested_provider = args.provider
+    provider_order = ["aws", "azure", "gcp"]
 
-def parse_args(argv=None):
-    parser = argparse.ArgumentParser(description="cloud-posture-watch CLI")
-    parser.add_argument("--provider", choices=["aws", "azure", "gcp"], required=True)
-    parser.add_argument("--baseline", required=True, help="Path to baseline YAML")
-    parser.add_argument("--baseline-schema", default=None, help="Optional baseline schema path")
-    return parser.parse_args(argv)
+    collectors = {
+        "aws": collect_aws,
+        "azure": collect_azure,
+        "gcp": collect_gcp,
+    }
 
+    provider_data: Dict[str, Any] = {}
+    skipped_providers: Dict[str, str] = {}
 
-def main(argv=None):
-    args = parse_args(argv)
+    for provider in provider_order:
+        if requested_provider and provider != requested_provider:
+            skipped_providers[provider] = f"skipped: provider filter active ({requested_provider})"
+            continue
+        provider_data[provider] = collectors[provider]()
 
-    schema_path = args.baseline_schema or _default_schema_for_provider(args.provider)
+    findings: Dict[str, Any] = {
+        "exposure": analyze_exposure(provider_data, baseline=args.baseline),
+        "logging": analyze_logging(provider_data, baseline=args.baseline),
+        "drift": analyze_drift(provider_data, baseline=args.baseline),
+    }
 
-    try:
-        validate_baseline_file_against_schema(args.baseline, schema_path)
-    except BaselineValidationError as exc:
-        print(str(exc), file=sys.stderr)
-        return 2
+    report: Dict[str, Any] = {
+        "metadata": {
+            "generated_at": _utc_now(),
+            "baseline": args.baseline,
+            "provider_scope": requested_provider or "all",
+            "active_providers": list(provider_data.keys()),
+            "skipped_providers": skipped_providers,
+        },
+        "providers": provider_data,
+        "findings": findings,
+    }
 
-    # existing execution path continues here in real project
-    print("Baseline validation passed")
+    _write_json(Path(args.out), report)
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
