@@ -1,121 +1,153 @@
+#!/usr/bin/env python3
 import argparse
 import json
-from typing import Any, Dict, List, Optional, Tuple
+import os
+import sys
+from pathlib import Path
+
+import yaml
 
 
-def _severity_rank(severity: Any) -> int:
-    s = str(severity or "").strip().lower()
-    order = {
-        "critical": 5,
-        "high": 4,
-        "medium": 3,
-        "low": 2,
-        "info": 1,
-        "informational": 1,
-    }
-    return order.get(s, 0)
+class BaselineValidationError(Exception):
+    """Raised when baseline validation fails."""
 
 
-def _priority_key(finding: Dict[str, Any]) -> Tuple[int, float]:
-    # Higher severity/value means higher priority (kept first)
-    sev = _severity_rank(finding.get("severity"))
-    score = finding.get("risk_score")
+def _type_name(value):
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    if value is None:
+        return "null"
+    return type(value).__name__
+
+
+def _expected_type_name(schema_type):
+    if isinstance(schema_type, list):
+        return " or ".join(str(t) for t in schema_type)
+    return str(schema_type)
+
+
+def _validate_node(data, schema, file_path, key_path="$"):
+    if not isinstance(schema, dict):
+        return
+
+    expected_type = schema.get("type")
+
+    if expected_type == "object":
+        if not isinstance(data, dict):
+            raise BaselineValidationError(
+                f"Baseline validation failed: file={file_path}, key={key_path}, "
+                f"expected type=object, actual type={_type_name(data)}"
+            )
+
+        properties = schema.get("properties", {})
+        required = schema.get("required", [])
+
+        for req_key in required:
+            if req_key not in data:
+                raise BaselineValidationError(
+                    f"Baseline validation failed: file={file_path}, key={key_path}.{req_key}, "
+                    "expected key is required but missing"
+                )
+
+        additional_properties = schema.get("additionalProperties", True)
+        if additional_properties is False:
+            unknown = [k for k in data.keys() if k not in properties]
+            if unknown:
+                bad = unknown[0]
+                raise BaselineValidationError(
+                    f"Baseline validation failed: file={file_path}, key={key_path}.{bad}, "
+                    "unexpected key not allowed by schema"
+                )
+
+        for prop, prop_schema in properties.items():
+            if prop in data:
+                _validate_node(data[prop], prop_schema, file_path, f"{key_path}.{prop}")
+
+    elif expected_type == "array":
+        if not isinstance(data, list):
+            raise BaselineValidationError(
+                f"Baseline validation failed: file={file_path}, key={key_path}, "
+                f"expected type=array, actual type={_type_name(data)}"
+            )
+
+        item_schema = schema.get("items")
+        if item_schema:
+            for idx, item in enumerate(data):
+                _validate_node(item, item_schema, file_path, f"{key_path}[{idx}]")
+
+    elif expected_type:
+        type_map = {
+            "string": str,
+            "integer": int,
+            "number": (int, float),
+            "boolean": bool,
+            "null": type(None),
+        }
+
+        expected_python = type_map.get(expected_type)
+        if expected_python and not isinstance(data, expected_python):
+            raise BaselineValidationError(
+                f"Baseline validation failed: file={file_path}, key={key_path}, "
+                f"expected type={_expected_type_name(expected_type)}, actual type={_type_name(data)}"
+            )
+
+
+def validate_baseline_file_against_schema(baseline_file, schema_file):
+    baseline_path = Path(baseline_file)
+    schema_path = Path(schema_file)
+
+    if not baseline_path.exists():
+        raise BaselineValidationError(f"Baseline file not found: {baseline_file}")
+    if not schema_path.exists():
+        raise BaselineValidationError(f"Schema file not found: {schema_file}")
+
+    with baseline_path.open("r", encoding="utf-8") as bf:
+        baseline_data = yaml.safe_load(bf) or {}
+
+    with schema_path.open("r", encoding="utf-8") as sf:
+        schema_data = json.load(sf)
+
+    _validate_node(baseline_data, schema_data, str(baseline_path), "$")
+
+
+def _default_schema_for_provider(provider):
+    base = Path(__file__).resolve().parent
+    return str(base / "schemas" / f"{provider}_baseline.schema.json")
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description="cloud-posture-watch CLI")
+    parser.add_argument("--provider", choices=["aws", "azure", "gcp"], required=True)
+    parser.add_argument("--baseline", required=True, help="Path to baseline YAML")
+    parser.add_argument("--baseline-schema", default=None, help="Optional baseline schema path")
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+
+    schema_path = args.baseline_schema or _default_schema_for_provider(args.provider)
+
     try:
-        score_val = float(score) if score is not None else 0.0
-    except Exception:
-        score_val = 0.0
-    return sev, score_val
+        validate_baseline_file_against_schema(args.baseline, schema_path)
+    except BaselineValidationError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
 
-
-def apply_max_findings_cap(
-    findings: List[Dict[str, Any]], max_findings: Optional[int]
-) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    metadata: Dict[str, Any] = {}
-    if max_findings is None:
-        return findings, metadata
-
-    if max_findings < 0:
-        raise ValueError("--max-findings must be >= 0")
-
-    original_count = len(findings)
-    if original_count <= max_findings:
-        return findings, metadata
-
-    indexed = list(enumerate(findings))
-    indexed.sort(key=lambda x: (_priority_key(x[1])[0], _priority_key(x[1])[1], x[0]), reverse=True)
-    kept = [item for _, item in indexed[:max_findings]]
-
-    metadata["truncated"] = True
-    metadata["original_count"] = original_count
-    metadata["emitted_count"] = len(kept)
-    return kept, metadata
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="cloud-posture-watch")
-    parser.add_argument("--format", choices=["console", "json", "markdown"], default="console")
-    parser.add_argument(
-        "--max-findings",
-        type=int,
-        default=None,
-        help="Cap the number of emitted findings in output (lowest-priority findings truncated first).",
-    )
-    return parser
-
-
-def assemble_report(findings: List[Dict[str, Any]], max_findings: Optional[int]) -> Dict[str, Any]:
-    capped_findings, trunc_meta = apply_max_findings_cap(findings, max_findings)
-    report: Dict[str, Any] = {
-        "findings": capped_findings,
-        "count": len(capped_findings),
-    }
-    report.update(trunc_meta)
-    return report
-
-
-def render_console(report: Dict[str, Any]) -> str:
-    lines = [f"Findings: {report.get('count', 0)}"]
-    if report.get("truncated"):
-        lines.append(
-            f"Output truncated: true (original_count={report.get('original_count')}, emitted_count={report.get('emitted_count')})"
-        )
-    for f in report.get("findings", []):
-        lines.append(f"- [{f.get('severity', 'unknown')}] {f.get('title', 'untitled')}")
-    return "\n".join(lines)
-
-
-def render_markdown(report: Dict[str, Any]) -> str:
-    out = [f"# Cloud Posture Watch Report", "", f"**Findings:** {report.get('count', 0)}", ""]
-    if report.get("truncated"):
-        out.extend(
-            [
-                "**truncated:** true",
-                f"**original_count:** {report.get('original_count')}",
-                f"**emitted_count:** {report.get('emitted_count')}",
-                "",
-            ]
-        )
-    for f in report.get("findings", []):
-        out.append(f"- **{f.get('severity', 'unknown').upper()}**: {f.get('title', 'untitled')}")
-    return "\n".join(out)
-
-
-def main() -> None:
-    parser = build_parser()
-    args = parser.parse_args()
-
-    # Placeholder findings source; analyzers remain unchanged.
-    findings: List[Dict[str, Any]] = []
-
-    report = assemble_report(findings, args.max_findings)
-
-    if args.format == "json":
-        print(json.dumps(report, indent=2))
-    elif args.format == "markdown":
-        print(render_markdown(report))
-    else:
-        print(render_console(report))
+    # existing execution path continues here in real project
+    print("Baseline validation passed")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
