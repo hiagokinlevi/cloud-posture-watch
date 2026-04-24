@@ -58,4 +58,4 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
 
 ## Automated Completions
-- [x] No-Findings Success Summary Block (cycle 30)
+- [x] CLI `--output-dir` Auto-Creation with Permission Validation (cycle 31)
