@@ -21,14 +21,19 @@
 - **Offline Azure RBAC review** — scans role assignment exports for broad Owner/Contributor access, guest privileged assignments, service principal Owner grants, and wildcard custom roles
 - **Offline GCP IAM review** — scans exported IAM policies for primitive roles, public principals, external sensitive-role users, default service accounts, and stale service account keys
 - **Cross-cloud IAM comparison** — combines offline AWS, Azure, and GCP identity findings into one Markdown and JSON review artifact
-- **CLI severity gate for CI/CD** — optional `--fail-on-severity` exits non-zero when matching findings are present
 
-## CI/CD severity gate example
+## CLI output redaction
+
+Use `--redact-account-ids` to mask account/project/subscription identifiers in generated Markdown and JSON reports.
 
 ```bash
-python cloud_posture_watch_cli.py \
-  --output-json reports/posture.json \
-  --fail-on-severity high
+cloud-posture-watch --output-json report.json --output-markdown report.md --redact-account-ids
 ```
 
-This returns a non-zero exit code if any `high` or `critical` finding exists in the generated JSON report.
+Example masking behavior (keep last 4 chars):
+
+- Before: `account_id: 123456789012`
+- After: `account_id: ********9012`
+
+- Before: `project_id: my-prod-project-1234`
+- After: `project_id: ***************1234`
