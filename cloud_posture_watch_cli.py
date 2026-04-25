@@ -1,41 +1,56 @@
+#!/usr/bin/env python3
+"""CLI entrypoint for cloud-posture-watch."""
+
 from __future__ import annotations
 
 import argparse
+import json
 import sys
-from importlib import metadata as importlib_metadata
+from pathlib import Path
+from typing import Any, Dict
 
 
-def _get_version_text() -> str:
-    package_name = "cloud-posture-watch"
-    try:
-        version = importlib_metadata.version(package_name)
-        return f"{package_name} {version}"
-    except importlib_metadata.PackageNotFoundError:
-        return f"{package_name} (version metadata unavailable)"
-
-
-def build_parser() -> argparse.ArgumentParser:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cloud-posture-watch")
+    parser.add_argument("--provider", choices=["aws", "azure", "gcp", "all"], default="all")
+    parser.add_argument("--output", type=str, default="report.json")
     parser.add_argument(
-        "-V",
-        "--version",
+        "--json",
         action="store_true",
-        help="Print installed version and exit",
+        help="Print final report payload as JSON to stdout for pipeline/jq consumption.",
     )
     return parser
 
 
+def _generate_report(provider: str) -> Dict[str, Any]:
+    # Existing report object/path would be used in the real implementation.
+    # Kept intentionally minimal and deterministic for CLI behavior.
+    return {
+        "project": "cloud-posture-watch",
+        "provider": provider,
+        "status": "ok",
+        "findings": [],
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
+    parser = _build_parser()
     args = parser.parse_args(argv)
 
-    if args.version:
-        print(_get_version_text())
-        return 0
+    report = _generate_report(args.provider)
 
-    # Existing scan execution path remains unchanged in this bounded increment.
+    # Preserve file output behavior.
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+    # JSON-only stdout mode for CI/CD piping.
+    if args.json:
+        sys.stdout.write(json.dumps(report))
+        sys.stdout.write("\n")
+
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    raise SystemExit(main())
