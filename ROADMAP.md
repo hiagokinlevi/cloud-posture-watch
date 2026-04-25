@@ -58,4 +58,4 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
 
 ## Automated Completions
-- [x] CLI `--strict-schema` Flag to Fail on Unknown Input Fields (cycle 36)
+- [x] CLI `--summary-only` Mode for Findings Counts Without Detailed Sections (cycle 37)
