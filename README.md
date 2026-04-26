@@ -24,14 +24,6 @@
 
 ## CLI options
 
-- `--output-dir` — directory for auto-generated report file names
-- `--output-file` — explicit report file path (takes precedence over `--output-dir`)
-- `--format` — output format (`md` or `json`)
-
-### Example
-
-```bash
-cloud-posture-watch --format json --output-file ./reports/final-posture.json
-```
-
-`--output-file` must point to a file path (not a directory), and its parent directory must already exist.
+- `--output <path>` — set report output file path
+- `--format <md|json>` — select report format
+- `--quiet` — suppress non-error console output (recommended in CI to reduce log noise while still emitting errors)
