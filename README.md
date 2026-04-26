@@ -22,18 +22,18 @@
 - **Offline GCP IAM review** — scans exported IAM policies for primitive roles, public principals, external sensitive-role users, default service accounts, and stale service account keys
 - **Cross-cloud IAM comparison** — combines offline AWS, Azure, and GCP identity findings into one Markdown and JSON review artifact
 
-## CLI output redaction
+## CLI options
 
-Use `--redact-account-ids` to mask account/project/subscription identifiers in generated Markdown and JSON reports.
+- `--exit-code-threshold {low|medium|high|critical}`: Return a non-zero exit code when any finding at or above the selected severity exists. Reports are still generated normally.
+
+### CI example
+
+Fail a PR on medium+ findings:
 
 ```bash
-cloud-posture-watch --output-json report.json --output-markdown report.md --redact-account-ids
+cloud-posture-watch --exit-code-threshold medium
 ```
 
-Example masking behavior (keep last 4 chars):
+## CLI output redaction
 
-- Before: `account_id: 123456789012`
-- After: `account_id: ********9012`
-
-- Before: `project_id: my-prod-project-1234`
-- After: `project_id: ***************1234`
+U
