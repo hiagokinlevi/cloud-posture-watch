@@ -58,4 +58,4 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
 
 ## Automated Completions
-- [x] CLI `--exit-code-threshold` for CI Failure Gating (cycle 38)
+- [x] CLI `--output-file` for Explicit Report Path (cycle 39)
