@@ -58,4 +58,4 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
 
 ## Automated Completions
-- [x] CLI `--output-file` for Explicit Report Path (cycle 39)
+- [x] CLI `--quiet` Flag to Suppress Non-Error Console Output (cycle 40)
