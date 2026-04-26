@@ -24,16 +24,14 @@
 
 ## CLI options
 
-- `--exit-code-threshold {low|medium|high|critical}`: Return a non-zero exit code when any finding at or above the selected severity exists. Reports are still generated normally.
+- `--output-dir` — directory for auto-generated report file names
+- `--output-file` — explicit report file path (takes precedence over `--output-dir`)
+- `--format` — output format (`md` or `json`)
 
-### CI example
-
-Fail a PR on medium+ findings:
+### Example
 
 ```bash
-cloud-posture-watch --exit-code-threshold medium
+cloud-posture-watch --format json --output-file ./reports/final-posture.json
 ```
 
-## CLI output redaction
-
-U
+`--output-file` must point to a file path (not a directory), and its parent directory must already exist.
