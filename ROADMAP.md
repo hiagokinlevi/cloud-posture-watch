@@ -58,4 +58,4 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
 
 ## Automated Completions
-- [x] CLI `--fail-on-parser-warnings` for offline evidence quality enforcement (cycle 41)
+- [x] CLI `--no-color` Flag for Deterministic Plaintext Output (cycle 42)
