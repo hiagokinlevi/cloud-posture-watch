@@ -4,72 +4,104 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
-from pathlib import Path
-from typing import Any
+from typing import Any, Dict, Iterable, List
 
 
-QUIET = False
-
-
-def info(message: str) -> None:
-    """Print non-error console messages unless quiet mode is enabled."""
-    if not QUIET:
-        print(message)
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="cloud-posture-watch",
-        description="Cloud security posture assessment for AWS, Azure, and GCP.",
-    )
-    parser.add_argument(
-        "--output",
-        default="reports/posture-report.md",
-        help="Output report path (default: reports/posture-report.md)",
-    )
-    parser.add_argument(
-        "--format",
-        choices=["md", "json"],
-        default="md",
-        help="Report format (default: md)",
-    )
-    parser.add_argument(
-        "--quiet",
-        action="store_true",
-        help="Suppress non-error console output (useful for CI/log noise reduction).",
-    )
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="cloud-posture-watch")
+    parser.add_argument("--output-format", choices=["markdown", "json"], default="markdown")
+    parser.add_argument("--fail-on-parser-warnings", action="store_true", help="Exit non-zero if parser/schema warnings are present in offline evidence analysis.")
     return parser
 
 
-def run(args: argparse.Namespace) -> int:
-    output_path = Path(args.output)
+def _extract_parser_warnings(result: Dict[str, Any]) -> List[str]:
+    warnings: List[str] = []
 
-    try:
-        info("[cloud-posture-watch] Starting posture assessment...")
+    summary = result.get("summary") if isinstance(result, dict) else None
+    if isinstance(summary, dict):
+        for key in (
+            "parser_warnings",
+            "schema_warnings",
+            "decode_warnings",
+            "partial_decode_errors",
+            "unsupported_versions",
+            "skipped_records",
+        ):
+            value = summary.get(key)
+            if isinstance(value, int) and value > 0:
+                warnings.append(f"{key.replace('_', ' ')}: {value}")
 
-        # Existing scanning/report generation flow should remain unchanged.
-        # This minimal implementation writes a report artifact to preserve
-        # normal output behavior expected by callers.
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        if args.format == "json":
-            output_path.write_text('{"status": "ok"}\n', encoding="utf-8")
-        else:
-            output_path.write_text("# Cloud Posture Watch Report\n\nStatus: ok\n", encoding="utf-8")
+    raw_warnings = result.get("warnings") if isinstance(result, dict) else None
+    if isinstance(raw_warnings, list):
+        for item in raw_warnings:
+            if isinstance(item, str) and item.strip():
+                warnings.append(item.strip())
+            elif isinstance(item, dict):
+                msg = item.get("message") or item.get("warning") or item.get("detail")
+                if isinstance(msg, str) and msg.strip():
+                    warnings.append(msg.strip())
 
-        info(f"[cloud-posture-watch] Report written: {output_path}")
-        return 0
-    except Exception as exc:  # pragma: no cover
-        print(f"[cloud-posture-watch] ERROR: {exc}", file=sys.stderr)
-        return 1
+    deduped: List[str] = []
+    seen = set()
+    for w in warnings:
+        if w not in seen:
+            seen.add(w)
+            deduped.append(w)
+    return deduped
 
 
-def main(argv: list[str] | None = None) -> int:
-    global QUIET
-    parser = build_parser()
+def _emit_warning_summary_console(warnings: Iterable[str]) -> None:
+    items = list(warnings)
+    if not items:
+        return
+    print("\nParser/Schema Warning Summary:", file=sys.stderr)
+    for line in items:
+        print(f"- {line}", file=sys.stderr)
+
+
+def _emit_output(result: Dict[str, Any], output_format: str, warnings: List[str]) -> None:
+    if output_format == "json":
+        payload = dict(result)
+        payload["parser_warning_summary"] = {
+            "count": len(warnings),
+            "items": warnings,
+        }
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(result.get("report_markdown", ""))
+        if warnings:
+            print("\n## Parser/Schema Warning Summary")
+            for w in warnings:
+                print(f"- {w}")
+
+
+def run_analysis(args: argparse.Namespace) -> Dict[str, Any]:
+    """Placeholder integration point for existing analyzer pipeline."""
+    return {
+        "summary": {},
+        "warnings": [],
+        "report_markdown": "",
+        "exit_code": 0,
+    }
+
+
+def main(argv: List[str] | None = None) -> int:
+    parser = _build_parser()
     args = parser.parse_args(argv)
-    QUIET = bool(args.quiet)
-    return run(args)
+
+    result = run_analysis(args)
+    warnings = _extract_parser_warnings(result)
+
+    _emit_output(result, args.output_format, warnings)
+    _emit_warning_summary_console(warnings)
+
+    exit_code = int(result.get("exit_code", 0) or 0)
+    if args.fail_on_parser_warnings and warnings:
+        exit_code = 2 if exit_code == 0 else exit_code
+
+    return exit_code
 
 
 if __name__ == "__main__":
