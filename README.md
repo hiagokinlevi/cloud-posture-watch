@@ -24,15 +24,10 @@
 
 ## CLI options
 
-- `--output-format {markdown,json}` — select report output format
-- `--fail-on-parser-warnings` — fail the run when offline parser/schema warnings are detected (for example: skipped records, unsupported versions, partial decode issues). Emits a concise warning summary in console and JSON output.
+- `--sarif-output <path>` — write findings in SARIF 2.1.0 format for GitHub Advanced Security and other SARIF-compatible platforms
 
-### CI example
+### Example
 
-```yaml
-- name: Run cloud-posture-watch (strict evidence quality)
-  run: |
-    cloud-posture-watch \
-      --output-format json \
-      --fail-on-parser-warnings
+```bash
+cloud-posture-watch --sarif-output reports/findings.sarif
 ```
