@@ -24,10 +24,13 @@
 
 ## CLI options
 
-- `--sarif-output <path>` — write findings in SARIF 2.1.0 format for GitHub Advanced Security and other SARIF-compatible platforms
+- `--sarif`
+- `--min-severity {low,medium,high,critical}` — only include findings at or above the selected severity in both JSON and Markdown outputs (detailed findings and summary counts)
 
-### Example
+Example:
 
 ```bash
-cloud-posture-watch --sarif-output reports/findings.sarif
+cloud-posture-watch --min-severity high --json report.json --markdown report.md
 ```
+
+Expected behavior: `low` and `medium` findings are excluded from the `findings` list and from summary totals in both output formats.
