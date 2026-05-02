@@ -58,4 +58,4 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
 
 ## Automated Completions
-- [x] CLI `--sarif-output` Flag for Security Toolchain Integration (cycle 44)
+- [x] CLI `--provider` Filter to Scope Scans by Cloud (cycle 45)
