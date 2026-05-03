@@ -58,4 +58,4 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
 
 ## Automated Completions
-- [x] CLI `--min-severity` Filter for Reported Findings (cycle 46)
+- [x] CLI `--baseline-version` Field in JSON/Markdown Reports (cycle 47)
