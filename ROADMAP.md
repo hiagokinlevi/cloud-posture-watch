@@ -58,4 +58,4 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
 
 ## Automated Completions
-- [x] CLI `--json-indent` Flag for Human-Readable JSON Reports (cycle 48)
+- [x] CLI `--version` Flag with Build Metadata Output (cycle 49)
