@@ -24,14 +24,11 @@
 
 ## CLI JSON formatting
 
-Use `--json-indent` when generating JSON to make artifacts easier to inspect locally or in CI:
+Us
+
+## Usage
 
 ```bash
-python cloud_posture_watch_cli.py \
-  --provider all \
-  --format json \
-  --output reports/posture.json \
-  --json-indent 2
+cloud-posture-watch --version
+# cloud-posture-watch 0.x.y
 ```
-
-Omit `--json-indent` for compact JSON output.
