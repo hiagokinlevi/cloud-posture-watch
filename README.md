@@ -21,16 +21,8 @@
 - **Offline Azure RBAC review** — scans role assignment exports for broad Owner/Contributor access, guest privileged assignments, service principal Owner grants, and wildcard custom roles
 - **Offline GCP IAM review** — scans exported IAM policies for primitive roles, public principals, external sensitive-role users, default service accounts, and stale service account keys
 - **Cross-cloud IAM comparison** — combines offline AWS, Azure, and GCP identity findings into one Markdown and JSON review artifact
+- **Baseline traceability metadata** — generated JSON and Markdown reports include `baseline_name` and `baseline_version` in report metadata for CI artifact provenance
 
 ## CLI options
 
-- `--sarif`
-- `--min-severity {low,medium,high,critical}` — only include findings at or above the selected severity in both JSON and Markdown outputs (detailed findings and summary counts)
-
-Example:
-
-```bash
-cloud-posture-watch --min-severity high --json report.json --markdown report.md
-```
-
-Expected behavior: `low` and `medium` findings are excluded from the `findings` list and from summary totals in both output formats.
+- `--sarif
