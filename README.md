@@ -21,8 +21,17 @@
 - **Offline Azure RBAC review** — scans role assignment exports for broad Owner/Contributor access, guest privileged assignments, service principal Owner grants, and wildcard custom roles
 - **Offline GCP IAM review** — scans exported IAM policies for primitive roles, public principals, external sensitive-role users, default service accounts, and stale service account keys
 - **Cross-cloud IAM comparison** — combines offline AWS, Azure, and GCP identity findings into one Markdown and JSON review artifact
-- **Baseline traceability metadata** — generated JSON and Markdown reports include `baseline_name` and `baseline_version` in report metadata for CI artifact provenance
 
-## CLI options
+## CLI JSON formatting
 
-- `--sarif
+Use `--json-indent` when generating JSON to make artifacts easier to inspect locally or in CI:
+
+```bash
+python cloud_posture_watch_cli.py \
+  --provider all \
+  --format json \
+  --output reports/posture.json \
+  --json-indent 2
+```
+
+Omit `--json-indent` for compact JSON output.
