@@ -58,4 +58,4 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
 
 ## Automated Completions
-- [x] CLI `--redact-secrets` flag for report value masking (cycle 50)
+- [x] CLI `--output-dir` flag for deterministic artifact placement (cycle 51)
