@@ -26,8 +26,10 @@
 
 Us
 
-## CLI usage
+## Output directory (CI-friendly)
+
+Use `--output-dir` to place all generated artifacts (Markdown/JSON and companion files) in a deterministic directory. The directory is created if missing; the CLI exits with a clear error if it is not writable.
 
 ```bash
-python cloud_posture_watch_cli.py --output-json report.json --output-md report.md --redact-secrets
+cloud-posture-watch --provider all --format both --output-dir "$GITHUB_WORKSPACE/artifacts/posture"
 ```
