@@ -26,9 +26,8 @@
 
 Us
 
-## Usage
+## CLI usage
 
 ```bash
-cloud-posture-watch --version
-# cloud-posture-watch 0.x.y
+python cloud_posture_watch_cli.py --output-json report.json --output-md report.md --redact-secrets
 ```
