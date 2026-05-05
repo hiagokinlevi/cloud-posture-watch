@@ -1,171 +1,127 @@
 #!/usr/bin/env python3
-"""
-cloud_posture_watch_cli.py
-"""
+"""cloud-posture-watch CLI entrypoint."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 
-SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"]
+def _load_json_report(path: Path) -> Dict[str, Any]:
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
 
 
-def _safe_get(d: Dict[str, Any], key: str, default: Any):
-    v = d.get(key, default)
-    return default if v is None else v
-
-
-def build_summary(findings: List[Dict[str, Any]]) -> Dict[str, Dict[str, int]]:
-    by_severity: Dict[str, int] = {k: 0 for k in SEVERITY_ORDER}
-    by_provider: Dict[str, int] = {}
-    by_analyzer: Dict[str, int] = {}
-
-    for f in findings:
-        sev = str(_safe_get(f, "severity", "info")).lower()
-        if sev not in by_severity:
-            by_severity[sev] = 0
-        by_severity[sev] += 1
-
-        provider = str(_safe_get(f, "provider", "unknown")).lower()
-        by_provider[provider] = by_provider.get(provider, 0) + 1
-
-        analyzer = str(_safe_get(f, "analyzer", "unknown"))
-        by_analyzer[analyzer] = by_analyzer.get(analyzer, 0) + 1
-
-    return {
-        "by_severity": by_severity,
-        "by_provider": dict(sorted(by_provider.items(), key=lambda kv: kv[0])),
-        "by_analyzer": dict(sorted(by_analyzer.items(), key=lambda kv: kv[0])),
-    }
-
-
-def render_markdown_report(findings: List[Dict[str, Any]], summary_only: bool = False) -> str:
-    summary = build_summary(findings)
-
-    lines: List[str] = []
-    lines.append("# Cloud Posture Watch Report")
-    lines.append("")
-    lines.append(f"Total findings: **{len(findings)}**")
-    lines.append("")
-
-    lines.append("## Findings by Severity")
-    for sev in SEVERITY_ORDER:
-        if sev in summary["by_severity"]:
-            lines.append(f"- {sev}: {summary['by_severity'][sev]}")
-    for sev, count in summary["by_severity"].items():
-        if sev not in SEVERITY_ORDER:
-            lines.append(f"- {sev}: {count}")
-    lines.append("")
-
-    lines.append("## Findings by Provider")
-    if summary["by_provider"]:
-        for provider, count in summary["by_provider"].items():
-            lines.append(f"- {provider}: {count}")
-    else:
-        lines.append("- none: 0")
-    lines.append("")
-
-    lines.append("## Findings by Analyzer")
-    if summary["by_analyzer"]:
-        for analyzer, count in summary["by_analyzer"].items():
-            lines.append(f"- {analyzer}: {count}")
-    else:
-        lines.append("- none: 0")
-    lines.append("")
-
-    if not summary_only:
-        lines.append("## Detailed Findings")
-        if not findings:
-            lines.append("No findings.")
-        else:
-            for idx, f in enumerate(findings, start=1):
-                sev = _safe_get(f, "severity", "info")
-                title = _safe_get(f, "title", "Untitled finding")
-                provider = _safe_get(f, "provider", "unknown")
-                resource = _safe_get(f, "resource", "unknown")
-                analyzer = _safe_get(f, "analyzer", "unknown")
-                lines.append(f"### {idx}. [{sev}] {title}")
-                lines.append(f"- Provider: {provider}")
-                lines.append(f"- Analyzer: {analyzer}")
-                lines.append(f"- Resource: {resource}")
-                description = f.get("description")
-                if description:
-                    lines.append(f"- Description: {description}")
-                lines.append("")
-
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def render_json_report(findings: List[Dict[str, Any]], summary_only: bool = False) -> Dict[str, Any]:
-    summary = build_summary(findings)
-    payload: Dict[str, Any] = {
-        "total_findings": len(findings),
-        "summary": summary,
-    }
-    if not summary_only:
-        payload["findings"] = findings
-    return payload
-
-
-def load_findings_from_file(path: Path) -> List[Dict[str, Any]]:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict) and "findings" in data and isinstance(data["findings"], list):
-        return data["findings"]
-    raise ValueError("Input JSON must be a findings array or an object containing a 'findings' array")
-
-
-def compute_exit_code(findings: List[Dict[str, Any]], fail_on: str) -> int:
-    if fail_on == "none":
-        return 0
-    threshold_index = SEVERITY_ORDER.index(fail_on)
-    severities = {str(_safe_get(f, "severity", "info")).lower() for f in findings}
-    for sev in severities:
-        if sev in SEVERITY_ORDER and SEVERITY_ORDER.index(sev) <= threshold_index:
-            return 2
-    return 0
-
-
-def parse_args(argv: List[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="cloud-posture-watch CLI")
-    parser.add_argument("--input", required=True, help="Path to findings JSON input")
-    parser.add_argument("--format", choices=["markdown", "json"], default="markdown")
-    parser.add_argument("--output", help="Output file path; defaults to stdout")
-    parser.add_argument(
-        "--fail-on",
-        choices=["critical", "high", "medium", "low", "info", "none"],
-        default="high",
-        help="Exit non-zero if findings at/above severity exist",
+def _finding_identity(f: Dict[str, Any]) -> Tuple[str, str, str, str]:
+    return (
+        str(f.get("provider", "")),
+        str(f.get("service", "")),
+        str(f.get("resource_id", "")),
+        str(f.get("rule_id", f.get("check_id", ""))),
     )
-    parser.add_argument(
-        "--summary-only",
+
+
+def _extract_findings(report: Dict[str, Any]) -> List[Dict[str, Any]]:
+    findings = report.get("findings")
+    if isinstance(findings, list):
+        return [x for x in findings if isinstance(x, dict)]
+    return []
+
+
+def _resolve_latest_snapshot(artifacts_dir: Path) -> Optional[Path]:
+    if not artifacts_dir.exists() or not artifacts_dir.is_dir():
+        return None
+    candidates = sorted(
+        [p for p in artifacts_dir.glob("*.json") if p.is_file()],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    return candidates[0] if candidates else None
+
+
+def _classify_new_findings(current_report: Dict[str, Any], previous_report: Dict[str, Any]) -> Tuple[int, int]:
+    current = _extract_findings(current_report)
+    previous = _extract_findings(previous_report)
+
+    prev_ids = {_finding_identity(f) for f in previous}
+    new_count = sum(1 for f in current if _finding_identity(f) not in prev_ids)
+    existing_count = len(current) - new_count
+    return new_count, existing_count
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="cloud-posture-watch")
+    p.add_argument("--report-json", help="Path to current JSON report", required=False)
+    p.add_argument("--exit-on-findings", action="store_true", help="Exit non-zero when any findings exist")
+    p.add_argument(
+        "--fail-on-new",
         action="store_true",
-        help="Output only high-level totals (severity/provider/analyzer) and omit detailed findings",
+        help="Exit non-zero only when newly introduced findings exist compared to --prior-report-json or latest watch snapshot",
     )
-    return parser.parse_args(argv)
+    p.add_argument(
+        "--prior-report-json",
+        help="Path to prior JSON report used for drift/new-finding comparison",
+        required=False,
+    )
+    p.add_argument(
+        "--watch-artifacts-dir",
+        default="watch-artifacts",
+        help="Directory containing watch mode JSON snapshots (used when --prior-report-json is not supplied)",
+    )
+    return p
 
 
-def main(argv: List[str] | None = None) -> int:
-    args = parse_args(argv or sys.argv[1:])
-    findings = load_findings_from_file(Path(args.input))
+def main(argv: Optional[List[str]] = None) -> int:
+    args = _build_parser().parse_args(argv)
 
-    if args.format == "markdown":
-        out = render_markdown_report(findings, summary_only=args.summary_only)
-    else:
-        out = json.dumps(render_json_report(findings, summary_only=args.summary_only), indent=2) + "\n"
+    if not args.report_json:
+        print("error: --report-json is required for this command", file=sys.stderr)
+        return 2
 
-    if args.output:
-        Path(args.output).write_text(out, encoding="utf-8")
-    else:
-        sys.stdout.write(out)
+    report_path = Path(args.report_json)
+    if not report_path.exists():
+        print(f"error: report file not found: {report_path}", file=sys.stderr)
+        return 2
 
-    return compute_exit_code(findings, args.fail_on)
+    current_report = _load_json_report(report_path)
+    findings = _extract_findings(current_report)
+
+    # Standard behavior: fail on any findings.
+    exit_code = 0
+    if args.exit_on_findings and findings:
+        exit_code = 1
+
+    # Drift-aware CI behavior: fail only on newly introduced findings.
+    if args.fail_on_new:
+        prior_path: Optional[Path] = None
+        if args.prior_report_json:
+            prior_path = Path(args.prior_report_json)
+        else:
+            prior_path = _resolve_latest_snapshot(Path(args.watch_artifacts_dir))
+
+        if prior_path is None or not prior_path.exists():
+            print(
+                "warning: --fail-on-new enabled but no prior report found; treating all findings as existing and passing",
+                file=sys.stderr,
+            )
+            return 0
+
+        prior_report = _load_json_report(prior_path)
+        new_count, existing_count = _classify_new_findings(current_report, prior_report)
+
+        print(
+            f"drift comparison: new_findings={new_count} existing_findings={existing_count} prior={prior_path}",
+            file=sys.stderr,
+        )
+        if new_count > 0:
+            return 1
+        return 0
+
+    return exit_code
 
 
 if __name__ == "__main__":
