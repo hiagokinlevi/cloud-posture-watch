@@ -24,12 +24,14 @@
 
 ## CLI options
 
-- `--exit-code-policy never|high|medium|any` — Controls process exit behavior for CI/CD pipelines based on detected finding severities. Default is `never`.
-  - `never`: always exit 0
-  - `high`: exit non-zero when at least one `high` or `critical` finding exists
-  - `medium`: exit non-zero when at least one `medium`/`high`/`critical` finding exists
-  - `any`: exit non-zero when any finding exists with recognized severity (`low` or above)
+- `--exit-on-findings` — fail when any findings are present
+- `--fail-on-new` — fail only when new findings are introduced compared to `--prior-report-json` (or latest JSON snapshot in `--watch-artifacts-dir`)
 
-## CLI JSON formatting
+### CI example (drift-only gate)
 
-Us
+```bash
+cloud-posture-watch \
+  --report-json artifacts/current.json \
+  --prior-report-json artifacts/previous.json \
+  --fail-on-new
+```
