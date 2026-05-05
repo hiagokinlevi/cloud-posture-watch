@@ -58,4 +58,4 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
 
 ## Automated Completions
-- [x] CLI `--exit-code-policy` Flag for CI Outcome Control (cycle 52)
+- [x] CLI `--summary-only` flag for concise CI-friendly reports (cycle 53)
