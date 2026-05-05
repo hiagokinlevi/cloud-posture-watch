@@ -58,4 +58,4 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
 
 ## Automated Completions
-- [x] CLI `--summary-only` flag for concise CI-friendly reports (cycle 53)
+- [x] CLI `--fail-on-new` Flag for Drift-Only CI Gating (cycle 54)
