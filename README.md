@@ -22,14 +22,14 @@
 - **Offline GCP IAM review** — scans exported IAM policies for primitive roles, public principals, external sensitive-role users, default service accounts, and stale service account keys
 - **Cross-cloud IAM comparison** — combines offline AWS, Azure, and GCP identity findings into one Markdown and JSON review artifact
 
+## CLI options
+
+- `--exit-code-policy never|high|medium|any` — Controls process exit behavior for CI/CD pipelines based on detected finding severities. Default is `never`.
+  - `never`: always exit 0
+  - `high`: exit non-zero when at least one `high` or `critical` finding exists
+  - `medium`: exit non-zero when at least one `medium`/`high`/`critical` finding exists
+  - `any`: exit non-zero when any finding exists with recognized severity (`low` or above)
+
 ## CLI JSON formatting
 
 Us
-
-## Output directory (CI-friendly)
-
-Use `--output-dir` to place all generated artifacts (Markdown/JSON and companion files) in a deterministic directory. The directory is created if missing; the CLI exits with a clear error if it is not writable.
-
-```bash
-cloud-posture-watch --provider all --format both --output-dir "$GITHUB_WORKSPACE/artifacts/posture"
-```
