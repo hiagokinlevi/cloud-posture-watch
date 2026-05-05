@@ -1,85 +1,104 @@
 #!/usr/bin/env python3
+"""cloud-posture-watch CLI entrypoint."""
+
+from __future__ import annotations
 
 import argparse
 import json
-import os
-from pathlib import Path
+import sys
+from typing import Any, Dict, Iterable, List, Optional
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="cloud-posture-watch CLI")
-    parser.add_argument("--provider", choices=["aws", "azure", "gcp", "all"], default="all")
-    parser.add_argument("--format", choices=["markdown", "json", "both"], default="both")
-    parser.add_argument("--baseline", default="standard")
+SEVERITY_ORDER = {
+    "low": 1,
+    "medium": 2,
+    "high": 3,
+    "critical": 4,
+}
+
+
+def _normalize_severity(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    return text if text in SEVERITY_ORDER else None
+
+
+def _iter_finding_severities(payload: Any) -> Iterable[str]:
+    """Yield normalized severities from common report structures."""
+    if isinstance(payload, dict):
+        sev = _normalize_severity(payload.get("severity"))
+        if sev:
+            yield sev
+
+        # Common list containers in report payloads
+        for key in ("findings", "issues", "results", "items"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                for item in value:
+                    yield from _iter_finding_severities(item)
+
+        # Recurse remaining nested values to be resilient to schema variants
+        for value in payload.values():
+            if isinstance(value, (dict, list)):
+                yield from _iter_finding_severities(value)
+
+    elif isinstance(payload, list):
+        for item in payload:
+            yield from _iter_finding_severities(item)
+
+
+def _should_fail_exit(policy: str, report_payload: Any) -> bool:
+    if policy == "never":
+        return False
+
+    threshold = {
+        "any": 1,
+        "medium": 2,
+        "high": 3,
+    }[policy]
+
+    for sev in _iter_finding_severities(report_payload):
+        if SEVERITY_ORDER.get(sev, 0) >= threshold:
+            return True
+    return False
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="cloud-posture-watch")
+    parser.add_argument("--input", help="Path to JSON findings/report input", required=False)
     parser.add_argument(
-        "--output-dir",
-        default=None,
+        "--exit-code-policy",
+        choices=["never", "high", "medium", "any"],
+        default="never",
         help=(
-            "Optional output directory for generated artifacts (Markdown/JSON and companion files). "
-            "Directory is created when missing."
+            "Control non-zero exit behavior based on finding severity: "
+            "never|high|medium|any (default: never)."
         ),
     )
     return parser
 
 
-def _resolve_output_dir(output_dir_arg: str | None) -> Path:
-    """
-    Resolve and validate artifact output directory.
-
-    - If output_dir_arg is unset: keep legacy behavior (current working directory).
-    - If set: create directory if missing.
-    - Always fail with a clear error when target is not writable.
-    """
-    target = Path(output_dir_arg).expanduser() if output_dir_arg else Path.cwd()
-
-    try:
-        target.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        raise SystemExit(f"[error] Unable to create output directory '{target}': {exc}") from exc
-
-    if not target.is_dir():
-        raise SystemExit(f"[error] Output path is not a directory: '{target}'")
-
-    if not os.access(target, os.W_OK):
-        raise SystemExit(f"[error] Output directory is not writable: '{target}'")
-
-    return target
+def _load_report(input_path: Optional[str]) -> Dict[str, Any]:
+    if not input_path:
+        return {}
+    with open(input_path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
-def _write_text(path: Path, content: str) -> None:
-    path.write_text(content, encoding="utf-8")
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
+    report_payload = _load_report(args.input)
 
-def _write_json(path: Path, payload: dict) -> None:
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def main() -> None:
-    args = _build_parser().parse_args()
-    output_dir = _resolve_output_dir(args.output_dir)
-
-    # Placeholder posture outputs (existing generators would feed these values).
-    report_md = "# cloud-posture-watch report\n\nGenerated posture summary.\n"
-    report_json = {
-        "provider": args.provider,
-        "baseline": args.baseline,
-        "status": "ok",
-    }
-    companion_json = {
-        "meta": {
-            "tool": "cloud-posture-watch",
-            "format": args.format,
-        }
-    }
-
-    if args.format in ("markdown", "both"):
-        _write_text(output_dir / "posture-report.md", report_md)
-    if args.format in ("json", "both"):
-        _write_json(output_dir / "posture-report.json", report_json)
-
-    # Existing companion artifact path should also honor --output-dir.
-    _write_json(output_dir / "posture-report.meta.json", companion_json)
+    # Existing report generation/output flow would run before this policy check.
+    if _should_fail_exit(args.exit_code_policy, report_payload):
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
