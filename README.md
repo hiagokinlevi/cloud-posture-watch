@@ -24,14 +24,5 @@
 
 ## CLI options
 
-- `--exit-on-findings` — fail when any findings are present
-- `--fail-on-new` — fail only when new findings are introduced compared to `--prior-report-json` (or latest JSON snapshot in `--watch-artifacts-dir`)
-
-### CI example (drift-only gate)
-
-```bash
-cloud-posture-watch \
-  --report-json artifacts/current.json \
-  --prior-report-json artifacts/previous.json \
-  --fail-on-new
-```
+- `--baseline-profile {minimal,standard,strict}` — explicitly choose the bundled baseline profile and override default auto-selection.
+- `--exit-
