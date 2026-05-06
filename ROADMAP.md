@@ -41,7 +41,6 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Webhook output for Slack / Teams notifications
 - [x] JSON output schema stable for downstream tooling integration
 - [x] GitHub Actions marketplace action
-- [x] CLI `--strict-schema` flag to validate generated JSON reports against bundled schema
 
 ---
 
@@ -57,3 +56,6 @@ This document outlines the planned development direction for `cloud-posture-watc
 ## Future / Under consideration
 
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
+
+## Automated Completions
+- [x] CLI `--strict-schema` Flag to Validate JSON Output Against Bundled Schema (cycle 55)
