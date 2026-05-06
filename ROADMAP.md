@@ -58,4 +58,4 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
 
 ## Automated Completions
-- [x] CLI `--strict-schema` Flag to Validate JSON Output Against Bundled Schema (cycle 55)
+- [x] CLI `--baseline-profile` Override Flag for Policy Selection (cycle 56)
