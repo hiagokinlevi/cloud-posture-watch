@@ -24,4 +24,5 @@
 
 ## CLI options
 
-- `--max-findings <int>` — cap findings emitted in JSON/Markdown/SARIF outputs after severity-first deterministic sorting; summary includes truncation context (for example, `displayed 200 of 612 findings`).
+- `--sort-findings {none,severity,resource}` — sort findings before Markdown/JSON/SARIF emission to produce deterministic CI diffs (`none` by default)
+- `--max-f
