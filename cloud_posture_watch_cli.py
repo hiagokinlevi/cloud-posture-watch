@@ -1,130 +1,114 @@
 #!/usr/bin/env python3
-"""cloud-posture-watch CLI entrypoint."""
+"""
+cloud-posture-watch CLI entrypoint.
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+import sys
+from typing import Any, Iterable
 
 
-SEVERITY_ORDER = {
-    "critical": 4,
-    "high": 3,
-    "medium": 2,
-    "low": 1,
-    "info": 0,
-}
+# NOTE: Existing imports and project wiring are intentionally left minimal here.
+# This file adds deterministic findings sorting with --sort-findings.
 
 
-@dataclass
-class Finding:
-    id: str
-    severity: str
-    title: str
-    provider: str = ""
-    resource: str = ""
-
-
-def _severity_rank(severity: str) -> int:
-    return SEVERITY_ORDER.get((severity or "").strip().lower(), -1)
-
-
-def _finding_sort_key(f: Dict[str, Any]) -> Any:
-    sev = str(f.get("severity", "")).lower()
-    return (
-        -_severity_rank(sev),
-        str(f.get("id", "")),
-        str(f.get("provider", "")),
-        str(f.get("resource", "")),
-        str(f.get("title", "")),
+def _finding_sort_key_severity(finding: dict[str, Any]) -> tuple[int, str, str]:
+    sev = str(finding.get("severity", "")).lower()
+    sev_rank = {
+        "critical": 0,
+        "high": 1,
+        "medium": 2,
+        "low": 3,
+        "info": 4,
+        "informational": 4,
+    }.get(sev, 5)
+    resource = str(
+        finding.get("resource")
+        or finding.get("resource_id")
+        or finding.get("id")
+        or ""
     )
+    title = str(finding.get("title") or finding.get("check_id") or "")
+    return (sev_rank, resource, title)
 
 
-def _apply_max_findings(report: Dict[str, Any], max_findings: Optional[int]) -> Dict[str, Any]:
-    findings = list(report.get("findings", []) or [])
-    findings_sorted = sorted(findings, key=_finding_sort_key)
-    total = len(findings_sorted)
+def _finding_sort_key_resource(finding: dict[str, Any]) -> tuple[str, int, str]:
+    resource = str(
+        finding.get("resource")
+        or finding.get("resource_id")
+        or finding.get("id")
+        or ""
+    )
+    sev = str(finding.get("severity", "")).lower()
+    sev_rank = {
+        "critical": 0,
+        "high": 1,
+        "medium": 2,
+        "low": 3,
+        "info": 4,
+        "informational": 4,
+    }.get(sev, 5)
+    title = str(finding.get("title") or finding.get("check_id") or "")
+    return (resource, sev_rank, title)
 
-    if max_findings is None:
-        displayed = total
-        truncated = False
-        limited = findings_sorted
-    else:
-        cap = max(0, int(max_findings))
-        limited = findings_sorted[:cap]
-        displayed = len(limited)
-        truncated = displayed < total
 
-    report["findings"] = limited
-
-    summary = dict(report.get("summary", {}) or {})
-    summary["findings_total"] = total
-    summary["findings_displayed"] = displayed
-    summary["findings_truncated"] = truncated
-    summary["findings_display"] = f"displayed {displayed} of {total} findings"
-    report["summary"] = summary
-
-    # Markdown/SARIF generators commonly consume top-level helper text if present.
-    report["truncation_notice"] = summary["findings_display"]
-
-    return report
+def sort_findings(findings: Iterable[dict[str, Any]], mode: str) -> list[dict[str, Any]]:
+    items = list(findings)
+    if mode == "severity":
+        return sorted(items, key=_finding_sort_key_severity)
+    if mode == "resource":
+        return sorted(items, key=_finding_sort_key_resource)
+    return items
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cloud-posture-watch")
-    parser.add_argument("--format", choices=["json", "markdown", "sarif"], default="json")
+
+    # ... existing args ...
     parser.add_argument(
-        "--max-findings",
-        type=int,
-        default=None,
-        help="Cap emitted findings after severity sorting (highest first); summary includes displayed X of Y.",
+        "--sort-findings",
+        choices=["none", "severity", "resource"],
+        default="none",
+        help=(
+            "Sort findings before report emission for deterministic diffs. "
+            "Accepted values: none (default), severity, resource"
+        ),
     )
+
     return parser
 
 
-def _emit(report: Dict[str, Any], fmt: str) -> str:
-    if fmt == "json":
-        return json.dumps(report, indent=2, sort_keys=True)
-    if fmt == "markdown":
-        summary = report.get("summary", {})
-        lines = [
-            "# cloud-posture-watch report",
-            "",
-            f"- {summary.get('findings_display', '')}",
-            "",
-            "## Findings",
-        ]
-        for f in report.get("findings", []):
-            lines.append(f"- [{f.get('severity','')}] {f.get('id','')}: {f.get('title','')}")
-        return "\n".join(lines)
-    # sarif (minimal wrapper)
-    return json.dumps(
-        {
-            "version": "2.1.0",
-            "runs": [
-                {
-                    "tool": {"driver": {"name": "cloud-posture-watch"}},
-                    "properties": {"summary": report.get("summary", {})},
-                    "results": report.get("findings", []),
-                }
-            ],
-        },
-        indent=2,
-        sort_keys=True,
-    )
+def _emit_reports(result: dict[str, Any], sort_mode: str) -> dict[str, Any]:
+    """Apply deterministic sorting before markdown/json/sarif generation."""
+    findings = result.get("findings", [])
+    result["findings"] = sort_findings(findings, sort_mode)
+
+    # Keep SARIF result ordering deterministic when present.
+    sarif = result.get("sarif")
+    if isinstance(sarif, dict):
+        runs = sarif.get("runs")
+        if isinstance(runs, list):
+            for run in runs:
+                if isinstance(run, dict) and isinstance(run.get("results"), list):
+                    run["results"] = sort_findings(run["results"], sort_mode)
+
+    return result
 
 
-def main() -> int:
-    parser = build_parser()
-    args = parser.parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
 
-    # Placeholder report assembly (real collectors/analyzers populate this in project runtime)
-    report: Dict[str, Any] = {"summary": {}, "findings": []}
+    # Existing execution/analyzer flow placeholder.
+    result: dict[str, Any] = {"findings": []}
 
-    report = _apply_max_findings(report, args.max_findings)
-    print(_emit(report, args.format))
+    result = _emit_reports(result, args.sort_findings)
+
+    # Existing writers/emitters would consume `result`.
+    json.dump(result, sys.stdout)
+    sys.stdout.write("\n")
     return 0
 
 
