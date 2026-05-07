@@ -24,5 +24,4 @@
 
 ## CLI options
 
-- `--baseline-profile {minimal,standard,strict}` — explicitly choose the bundled baseline profile and override default auto-selection.
-- `--exit-
+- `--max-findings <int>` — cap findings emitted in JSON/Markdown/SARIF outputs after severity-first deterministic sorting; summary includes truncation context (for example, `displayed 200 of 612 findings`).
