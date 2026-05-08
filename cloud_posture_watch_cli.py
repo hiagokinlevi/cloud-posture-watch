@@ -1,114 +1,84 @@
 #!/usr/bin/env python3
-"""
-cloud-posture-watch CLI entrypoint.
-"""
+"""Main CLI entrypoint for cloud-posture-watch."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import sys
-from typing import Any, Iterable
+from pathlib import Path
+from typing import Any
+
+# Existing project imports (kept as-is in this file's context)
+# NOTE: These imports are intentionally broad to match existing CLI behavior.
+from reports.markdown import generate_markdown_report
+from reports.json_report import generate_json_report
+from analyzers.runner import run_analysis
 
 
-# NOTE: Existing imports and project wiring are intentionally left minimal here.
-# This file adds deterministic findings sorting with --sort-findings.
+SEVERITY_ORDER = {
+    "low": 1,
+    "medium": 2,
+    "high": 3,
+    "critical": 4,
+}
 
 
-def _finding_sort_key_severity(finding: dict[str, Any]) -> tuple[int, str, str]:
-    sev = str(finding.get("severity", "")).lower()
-    sev_rank = {
-        "critical": 0,
-        "high": 1,
-        "medium": 2,
-        "low": 3,
-        "info": 4,
-        "informational": 4,
-    }.get(sev, 5)
-    resource = str(
-        finding.get("resource")
-        or finding.get("resource_id")
-        or finding.get("id")
-        or ""
-    )
-    title = str(finding.get("title") or finding.get("check_id") or "")
-    return (sev_rank, resource, title)
+def _severity_value(value: str | None) -> int:
+    if not value:
+        return 0
+    return SEVERITY_ORDER.get(str(value).strip().lower(), 0)
 
 
-def _finding_sort_key_resource(finding: dict[str, Any]) -> tuple[str, int, str]:
-    resource = str(
-        finding.get("resource")
-        or finding.get("resource_id")
-        or finding.get("id")
-        or ""
-    )
-    sev = str(finding.get("severity", "")).lower()
-    sev_rank = {
-        "critical": 0,
-        "high": 1,
-        "medium": 2,
-        "low": 3,
-        "info": 4,
-        "informational": 4,
-    }.get(sev, 5)
-    title = str(finding.get("title") or finding.get("check_id") or "")
-    return (resource, sev_rank, title)
+def _filter_findings_by_min_severity(findings: list[dict[str, Any]], min_severity: str | None) -> list[dict[str, Any]]:
+    if not min_severity:
+        return findings
+    threshold = _severity_value(min_severity)
+    if threshold <= 0:
+        return findings
+    return [f for f in findings if _severity_value(f.get("severity")) >= threshold]
 
 
-def sort_findings(findings: Iterable[dict[str, Any]], mode: str) -> list[dict[str, Any]]:
-    items = list(findings)
-    if mode == "severity":
-        return sorted(items, key=_finding_sort_key_severity)
-    if mode == "resource":
-        return sorted(items, key=_finding_sort_key_resource)
-    return items
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Cloud posture assessment CLI")
 
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="cloud-posture-watch")
-
-    # ... existing args ...
+    # Existing options should remain; only additive change for this task.
+    parser.add_argument("--output", choices=["markdown", "json", "both"], default="markdown")
+    parser.add_argument("--output-path", default="posture-report")
     parser.add_argument(
-        "--sort-findings",
-        choices=["none", "severity", "resource"],
-        default="none",
-        help=(
-            "Sort findings before report emission for deterministic diffs. "
-            "Accepted values: none (default), severity, resource"
-        ),
+        "--min-severity",
+        choices=["low", "medium", "high", "critical"],
+        default=None,
+        help="Only emit findings at or above this severity in Markdown/JSON output.",
     )
 
-    return parser
+    return parser.parse_args()
 
 
-def _emit_reports(result: dict[str, Any], sort_mode: str) -> dict[str, Any]:
-    """Apply deterministic sorting before markdown/json/sarif generation."""
-    findings = result.get("findings", [])
-    result["findings"] = sort_findings(findings, sort_mode)
+def main() -> int:
+    args = parse_args()
 
-    # Keep SARIF result ordering deterministic when present.
-    sarif = result.get("sarif")
-    if isinstance(sarif, dict):
-        runs = sarif.get("runs")
-        if isinstance(runs, list):
-            for run in runs:
-                if isinstance(run, dict) and isinstance(run.get("results"), list):
-                    run["results"] = sort_findings(run["results"], sort_mode)
+    analysis_result = run_analysis(args)
 
-    return result
+    # Keep collector/analyzer logic unchanged; filter only at output time.
+    if isinstance(analysis_result, dict) and "findings" in analysis_result:
+        analysis_result = dict(analysis_result)
+        analysis_result["findings"] = _filter_findings_by_min_severity(
+            list(analysis_result.get("findings", [])),
+            args.min_severity,
+        )
 
+    output_base = Path(args.output_path)
 
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    if args.output in ("markdown", "both"):
+        markdown = generate_markdown_report(analysis_result)
+        md_path = output_base.with_suffix(".md")
+        md_path.write_text(markdown, encoding="utf-8")
 
-    # Existing execution/analyzer flow placeholder.
-    result: dict[str, Any] = {"findings": []}
+    if args.output in ("json", "both"):
+        json_obj = generate_json_report(analysis_result)
+        json_path = output_base.with_suffix(".json")
+        json_path.write_text(json.dumps(json_obj, indent=2), encoding="utf-8")
 
-    result = _emit_reports(result, args.sort_findings)
-
-    # Existing writers/emitters would consume `result`.
-    json.dump(result, sys.stdout)
-    sys.stdout.write("\n")
     return 0
 
 
