@@ -58,4 +58,4 @@ This document outlines the planned development direction for `cloud-posture-watc
 - [x] Cloud SOAR routing layer with provider playbooks, approval po
 
 ## Automated Completions
-- [x] CLI `--sort-findings` Flag for Deterministic Report Ordering (cycle 58)
+- [x] CLI `--min-severity` Flag for Report Filtering (cycle 59)
