@@ -24,5 +24,12 @@
 
 ## CLI options
 
-- `--sort-findings {none,severity,resource}` — sort findings before Markdown/JSON/SARIF emission to produce deterministic CI diffs (`none` by default)
-- `--max-f
+- `--output` — output format: `markdown|json|both`
+- `--output-path` — base path for emitted report files
+- `--min-severity` — filter emitted findings to `low|medium|high|critical` (applies to both Markdown and JSON output)
+
+### CI example
+
+```bash
+cloud-posture-watch --output both --output-path artifacts/posture-report --min-severity high
+```
